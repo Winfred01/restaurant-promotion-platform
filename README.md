@@ -1,3 +1,5 @@
+English | [简体中文](README.zh-CN.md)
+
 # Restaurant Promotion & Revenue Growth Platform
 
 A multi-tenant SaaS platform for restaurants to create promotions, manage coupon redemption, capture new-customer acquisition sources, and measure how promotions contribute to revenue.

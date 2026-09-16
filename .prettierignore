@@ -1,0 +1,6 @@
+README.md
+README.zh-CN.md
+node_modules
+.next
+coverage
+package-lock.json

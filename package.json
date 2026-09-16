@@ -14,7 +14,9 @@
     "format": "prettier --check .",
     "format:write": "prettier --write .",
     "prisma:generate": "prisma generate",
-    "prisma:migrate:dev": "prisma migrate dev"
+    "prisma:migrate:dev": "prisma migrate dev",
+    "prisma:migrate:deploy": "prisma migrate deploy",
+    "prisma:validate": "prisma validate"
   },
   "dependencies": {
     "@prisma/client": "6.12.0",

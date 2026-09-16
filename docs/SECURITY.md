@@ -27,7 +27,7 @@ STAFF can search/create customers, capture first channel, view eligible promotio
 
 ## Authentication and Sessions
 
-Use Auth.js or equivalent. Use secure HTTP-only cookies, CSRF protection for cookie-backed mutations, secure password hashing if passwords are used, and minimal session payloads.
+Use Auth.js with email/password credentials for employees in v0.1. Do not add OAuth providers in v0.1. Use secure HTTP-only cookies, CSRF protection for cookie-backed mutations, production-appropriate password hashing, and minimal session payloads. Customers never authenticate.
 
 ## Public QR Claim Abuse
 

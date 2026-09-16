@@ -40,6 +40,7 @@ Before making changes, coding agents must:
 - Promotion code changes must not bypass one-use-per-customer-per-promotion.
 - One bill can use only one Promotion.
 - Same receipt must not be redeemed twice within the chosen restaurant/branch scope.
+- Receipt uniqueness is branch-scoped by `(branchId, normalizedReceiptNumber)` for active redemption context; VOIDED redemptions must preserve history and allow corrected redemption.
 - Redemption must be concurrency-safe.
 - Void is not delete.
 - Never delete redemptions to implement void.
@@ -47,6 +48,8 @@ Before making changes, coding agents must:
 - Exclude VOIDED redemptions from revenue calculations.
 - Do not call promotion-linked sales "incremental revenue" unless a baseline/control methodology exists.
 - Keep Acquisition Channel analytics separate from Promotion analytics.
+- Use Auth.js email/password credentials for v0.1 employee auth; do not add OAuth providers unless explicitly authorized.
+- Keep Prisma pinned at `6.12.0` through v0.1 unless a concrete security or compatibility issue requires changing it.
 
 ## Code Quality Rules
 

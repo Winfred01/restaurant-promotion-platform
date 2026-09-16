@@ -6,7 +6,7 @@ Use a modular monolith optimized for a 30-day v0.1:
 
 - Next.js App Router, TypeScript, Tailwind CSS.
 - PostgreSQL and Prisma.
-- Auth.js or similarly mature authentication.
+- Auth.js with email/password credentials for employee authentication.
 - Docker for local services.
 - GitHub Actions for CI.
 
@@ -42,7 +42,7 @@ Defense-in-depth:
 
 ## Authentication
 
-Use Auth.js or equivalent. Session should identify the User only; organization/branch permissions are loaded server-side. Customers never authenticate.
+Use Auth.js with email/password credentials for v0.1 employee authentication. Passwords must be hashed with a production-appropriate password hashing library and never stored plaintext. Do not add OAuth providers in v0.1. Session should identify the User only; organization/branch permissions are loaded server-side. Customers never authenticate.
 
 ## Authorization
 
@@ -92,4 +92,4 @@ Validation errors give field feedback. Authorization and not-found responses mus
 
 ## Deployment Model
 
-Single Next.js app container plus PostgreSQL. GitHub Actions runs lint, typecheck, tests, and build. Migrations run explicitly during deployment.
+Target Vercel for the Next.js app and managed PostgreSQL, with Neon preferred initially. Docker remains supported for local development and portability. GitHub Actions runs lint, typecheck, tests, and build. Migrations run explicitly during deployment, and provider-specific deployment details must not leak into domain logic.

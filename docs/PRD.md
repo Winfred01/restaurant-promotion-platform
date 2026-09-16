@@ -36,7 +36,7 @@ Target v0.1 flow: restaurant setup -> branch setup -> staff/RBAC -> customer loo
 - Receipt number and bill subtotal capture.
 - One promotion per bill.
 - One successful redemption per customer per promotion.
-- Duplicate receipt protection in restaurant/branch scope.
+- Duplicate receipt protection at branch scope.
 - Concurrency-safe redemption.
 - Manager/Owner void with audit trail.
 - Promotion analytics and separate acquisition analytics.
@@ -116,7 +116,7 @@ Acquisition analytics:
 - Every tenant-owned read/write is organization-scoped.
 - Authorization checks include role and branch/organization membership.
 - Promotion codes cannot bypass one-use-per-customer-per-promotion.
-- Duplicate receipts and duplicate customer/promotion redemptions are blocked by database constraints.
+- Duplicate active receipts are blocked by `(branchId, normalizedReceiptNumber)`, while VOIDED redemptions preserve history and allow corrected redemption for the same receipt.
 - Redemptions are concurrency-safe.
 - Historical transactional data is archived/voided, not deleted.
 

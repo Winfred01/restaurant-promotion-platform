@@ -2,7 +2,7 @@
 
 ## Principles
 
-- PostgreSQL is the source of truth.
+- PostgreSQL is the source of truth. Use Prisma `6.12.0` through v0.1 unless a concrete security or compatibility problem requires changing it.
 - Monetary values use integer cents.
 - Tenant-owned records are organization-scoped.
 - Normalized phone numbers are used for customer uniqueness and lookup.
@@ -82,10 +82,10 @@ Permanent bill-level redemption record. Fields: `id`, `organizationId`, `branchI
 Constraints:
 
 - Unique partial `(customerId, promotionId)` where `status = COMPLETED`.
-- Unique partial `(organizationId, branchId, receiptNumber)` where `status = COMPLETED`.
+- Unique partial `(branchId, normalizedReceiptNumber)` where `status = COMPLETED`.
 - Index `(organizationId, promotionId, status, redeemedAt)`.
 
-Default receipt scope is branch-level unless owner confirms organization-wide receipt uniqueness.
+Receipt uniqueness is branch-scoped: `(branchId, normalizedReceiptNumber)` identifies one active redemption context. Different branches may reuse the same receipt number. VOIDED redemptions preserve history and must allow a corrected redemption for the same receipt without deleting the old record.
 
 ### RedemptionVoid
 

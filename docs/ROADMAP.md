@@ -62,7 +62,7 @@ Exit: critical business loop passes and high-risk security paths have tests.
 
 Target: October 12-14, 2026.
 
-Deliver: production deployment, environment docs, migration process, release checklist, smoke test.
+Deliver: Vercel deployment for the Next.js app, managed PostgreSQL setup with Neon preferred initially, environment docs, migration process, release checklist, smoke test.
 
 Exit: CI passing and deployed release candidate verified.
 

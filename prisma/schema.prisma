@@ -19,6 +19,12 @@ enum BranchStatus {
   ARCHIVED
 }
 
+enum UserStatus {
+  ACTIVE
+  DISABLED
+  ARCHIVED
+}
+
 model RestaurantOrganization {
   id        String                       @id @default(cuid())
   name      String
@@ -45,4 +51,16 @@ model Branch {
 
   @@unique([organizationId, name])
   @@index([organizationId, status])
+}
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  name         String
+  passwordHash String
+  status       UserStatus @default(ACTIVE)
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+
+  @@index([status])
 }

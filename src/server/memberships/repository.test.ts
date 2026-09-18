@@ -1,3 +1,5 @@
+import { randomUUID } from "node:crypto";
+
 import { MembershipRole, MembershipStatus, PrismaClient } from "@prisma/client";
 import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
@@ -20,39 +22,69 @@ const describeWithLocalDatabase = isLocalDatabase ? describeWithDatabase : descr
 
 describeWithLocalDatabase("organization and branch memberships", () => {
   const db = new PrismaClient();
+  const fixtureNamespace = randomUUID();
+  const organizationIds: string[] = [];
+  const userIds: string[] = [];
+  let fixtureSequence = 0;
+
+  function uniqueValue(base: string) {
+    fixtureSequence += 1;
+    return `${base}-${fixtureNamespace}-${fixtureSequence}`;
+  }
+
+  async function createOrganization(name: string, slug: string) {
+    const organization = await createRestaurantOrganization(db, {
+      name,
+      slug: uniqueValue(slug)
+    });
+    organizationIds.push(organization.id);
+    return organization;
+  }
 
   beforeAll(async () => {
     await db.$connect();
   });
 
   afterEach(async () => {
-    await db.branchMembership.deleteMany();
-    await db.organizationMembership.deleteMany();
-    await db.user.deleteMany();
-    await db.branch.deleteMany();
-    await db.restaurantOrganization.deleteMany();
+    await db.branchMembership.deleteMany({
+      where: { organizationId: { in: organizationIds } }
+    });
+    await db.organizationMembership.deleteMany({
+      where: { organizationId: { in: organizationIds } }
+    });
+    await db.branch.deleteMany({
+      where: { organizationId: { in: organizationIds } }
+    });
+    await db.user.deleteMany({
+      where: { id: { in: userIds } }
+    });
+    await db.restaurantOrganization.deleteMany({
+      where: { id: { in: organizationIds } }
+    });
+    organizationIds.length = 0;
+    userIds.length = 0;
   });
 
   afterAll(async () => {
     await db.$disconnect();
   });
 
-  async function createUser(email: string) {
-    return db.user.create({
+  async function createUser(emailPrefix: string) {
+    const email = `${uniqueValue(emailPrefix)}@example.com`;
+    const user = await db.user.create({
       data: {
         email,
         name: email,
         passwordHash: "test-password-hash"
       }
     });
+    userIds.push(user.id);
+    return user;
   }
 
   it("assigns one organization role per user and supports tenant-scoped role changes", async () => {
-    const organization = await createRestaurantOrganization(db, {
-      name: "Tenant A",
-      slug: "tenant-a"
-    });
-    const user = await createUser("manager@example.com");
+    const organization = await createOrganization("Tenant A", "tenant-a");
+    const user = await createUser("manager");
 
     const membership = await createOrganizationMembership(db, {
       organizationId: organization.id,
@@ -102,19 +134,13 @@ describeWithLocalDatabase("organization and branch memberships", () => {
   });
 
   it("requires branch memberships to match an organization membership and branch tenant", async () => {
-    const organizationA = await createRestaurantOrganization(db, {
-      name: "Tenant A",
-      slug: "tenant-a"
-    });
-    const organizationB = await createRestaurantOrganization(db, {
-      name: "Tenant B",
-      slug: "tenant-b"
-    });
+    const organizationA = await createOrganization("Tenant A", "tenant-a");
+    const organizationB = await createOrganization("Tenant B", "tenant-b");
     const branchB = await createBranch(db, {
       organizationId: organizationB.id,
       name: "B Branch"
     });
-    const user = await createUser("staff@example.com");
+    const user = await createUser("staff");
 
     await createOrganizationMembership(db, {
       organizationId: organizationA.id,
@@ -146,15 +172,12 @@ describeWithLocalDatabase("organization and branch memberships", () => {
   });
 
   it("enforces one membership per user and branch and keeps updates tenant-scoped", async () => {
-    const organization = await createRestaurantOrganization(db, {
-      name: "Tenant A",
-      slug: "tenant-a"
-    });
+    const organization = await createOrganization("Tenant A", "tenant-a");
     const branch = await createBranch(db, {
       organizationId: organization.id,
       name: "Downtown"
     });
-    const user = await createUser("branch-manager@example.com");
+    const user = await createUser("branch-manager");
 
     await createOrganizationMembership(db, {
       organizationId: organization.id,
@@ -205,15 +228,12 @@ describeWithLocalDatabase("organization and branch memberships", () => {
   });
 
   it("denies access when either organization or branch membership is disabled", async () => {
-    const organization = await createRestaurantOrganization(db, {
-      name: "Tenant A",
-      slug: "tenant-a"
-    });
+    const organization = await createOrganization("Tenant A", "tenant-a");
     const branch = await createBranch(db, {
       organizationId: organization.id,
       name: "Downtown"
     });
-    const user = await createUser("disabled@example.com");
+    const user = await createUser("disabled");
     const identity = {
       organizationId: organization.id,
       branchId: branch.id,
@@ -260,19 +280,13 @@ describeWithLocalDatabase("organization and branch memberships", () => {
   });
 
   it("does not expose a branch membership through another tenant", async () => {
-    const organizationA = await createRestaurantOrganization(db, {
-      name: "Tenant A",
-      slug: "tenant-a"
-    });
-    const organizationB = await createRestaurantOrganization(db, {
-      name: "Tenant B",
-      slug: "tenant-b"
-    });
+    const organizationA = await createOrganization("Tenant A", "tenant-a");
+    const organizationB = await createOrganization("Tenant B", "tenant-b");
     const branchB = await createBranch(db, {
       organizationId: organizationB.id,
       name: "B Branch"
     });
-    const user = await createUser("multi-tenant@example.com");
+    const user = await createUser("multi-tenant");
 
     await createOrganizationMembership(db, {
       organizationId: organizationB.id,

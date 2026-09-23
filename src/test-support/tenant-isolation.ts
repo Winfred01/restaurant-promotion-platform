@@ -22,6 +22,7 @@ import {
   createOrganizationMembership
 } from "@/server/memberships/repository";
 import { createBranch, createRestaurantOrganization } from "@/server/organizations/repository";
+import { normalizePhoneNumber } from "@/server/customers/phone";
 
 type IdReference = {
   id: string;
@@ -46,6 +47,11 @@ export type UserFactoryInput = {
   name?: string;
   passwordHash?: string;
   status?: UserStatus;
+};
+
+export type CustomerFactoryInput = {
+  phoneNumber?: string;
+  phoneNumberDisplay?: string;
 };
 
 export type TenantScopeFactoryInput = {
@@ -131,6 +137,23 @@ export function createTenantIsolationHarness(db: PrismaClient) {
     return user;
   }
 
+  async function createTenantCustomer(
+    organization: Pick<RestaurantOrganization, "id">,
+    input: CustomerFactoryInput = {}
+  ) {
+    fixtureSequence += 1;
+    const phoneNumberRaw = input.phoneNumber ?? `416${String(fixtureSequence).padStart(7, "0")}`;
+
+    return db.customer.create({
+      data: {
+        organizationId: organization.id,
+        phoneNumberRaw,
+        phoneNumberNormalized: normalizePhoneNumber(phoneNumberRaw),
+        phoneNumberDisplay: input.phoneNumberDisplay ?? phoneNumberRaw
+      }
+    });
+  }
+
   async function createTenantOrganizationMembership(input: {
     organization: Pick<RestaurantOrganization, "id">;
     user: Pick<User, "id">;
@@ -197,6 +220,9 @@ export function createTenantIsolationHarness(db: PrismaClient) {
     const trackedUserIds = [...userIds];
 
     if (trackedOrganizationIds.length > 0) {
+      await db.customer.deleteMany({
+        where: { organizationId: { in: trackedOrganizationIds } }
+      });
       await db.branchMembership.deleteMany({
         where: { organizationId: { in: trackedOrganizationIds } }
       });
@@ -228,6 +254,7 @@ export function createTenantIsolationHarness(db: PrismaClient) {
     createTenant,
     createBranch: createTenantBranch,
     createUser: createTenantUser,
+    createCustomer: createTenantCustomer,
     createOrganizationMembership: createTenantOrganizationMembership,
     createBranchMembership: createTenantBranchMembership,
     createTenantScope,

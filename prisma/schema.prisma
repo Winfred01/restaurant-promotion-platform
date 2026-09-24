@@ -36,6 +36,11 @@ enum MembershipStatus {
   DISABLED
 }
 
+enum AcquisitionChannelStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 model RestaurantOrganization {
   id                      String                       @id @default(cuid())
   name                    String
@@ -43,6 +48,7 @@ model RestaurantOrganization {
   timezone                String                       @default("America/Toronto")
   currency                String                       @default("CAD") @db.Char(3)
   status                  RestaurantOrganizationStatus @default(ACTIVE)
+  acquisitionChannels     AcquisitionChannel[]
   branches                Branch[]
   customers               Customer[]
   organizationMemberships OrganizationMembership[]
@@ -52,20 +58,40 @@ model RestaurantOrganization {
   @@index([status])
 }
 
+model AcquisitionChannel {
+  id              String                   @id @default(cuid())
+  organizationId  String
+  organization    RestaurantOrganization   @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name            String
+  isSystemDefault Boolean                  @default(false)
+  status          AcquisitionChannelStatus @default(ACTIVE)
+  sortOrder       Int                      @default(0)
+  customers       Customer[]
+  createdAt       DateTime                 @default(now())
+  updatedAt       DateTime                 @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, name])
+  @@index([organizationId, status, sortOrder])
+}
+
 model Customer {
-  id                    String                 @id @default(cuid())
+  id                    String                  @id @default(cuid())
   organizationId        String
   organization          RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  acquisitionChannelId  String?
+  acquisitionChannel    AcquisitionChannel?     @relation(fields: [acquisitionChannelId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
   phoneNumberRaw        String
   phoneNumberNormalized String
   phoneNumberDisplay    String
-  firstSeenAt           DateTime               @default(now())
-  lastSeenAt            DateTime               @default(now())
-  createdAt             DateTime               @default(now())
-  updatedAt             DateTime               @updatedAt
+  firstSeenAt           DateTime                @default(now())
+  lastSeenAt            DateTime                @default(now())
+  createdAt             DateTime                @default(now())
+  updatedAt             DateTime                @updatedAt
 
   @@unique([id, organizationId])
   @@unique([organizationId, phoneNumberNormalized])
+  @@index([organizationId, acquisitionChannelId])
   @@index([organizationId, lastSeenAt])
 }
 

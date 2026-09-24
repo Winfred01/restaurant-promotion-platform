@@ -1,6 +1,7 @@
 import { randomUUID } from "node:crypto";
 
 import {
+  type AcquisitionChannelStatus,
   MembershipRole,
   type Branch,
   type BranchStatus,
@@ -52,6 +53,14 @@ export type UserFactoryInput = {
 export type CustomerFactoryInput = {
   phoneNumber?: string;
   phoneNumberDisplay?: string;
+  acquisitionChannelId?: string;
+};
+
+export type AcquisitionChannelFactoryInput = {
+  name?: string;
+  isSystemDefault?: boolean;
+  status?: AcquisitionChannelStatus;
+  sortOrder?: number;
 };
 
 export type TenantScopeFactoryInput = {
@@ -147,9 +156,25 @@ export function createTenantIsolationHarness(db: PrismaClient) {
     return db.customer.create({
       data: {
         organizationId: organization.id,
+        acquisitionChannelId: input.acquisitionChannelId,
         phoneNumberRaw,
         phoneNumberNormalized: normalizePhoneNumber(phoneNumberRaw),
         phoneNumberDisplay: input.phoneNumberDisplay ?? phoneNumberRaw
+      }
+    });
+  }
+
+  async function createTenantAcquisitionChannel(
+    organization: Pick<RestaurantOrganization, "id">,
+    input: AcquisitionChannelFactoryInput = {}
+  ) {
+    return db.acquisitionChannel.create({
+      data: {
+        organizationId: organization.id,
+        name: input.name ?? uniqueValue("Test Channel"),
+        isSystemDefault: input.isSystemDefault,
+        status: input.status,
+        sortOrder: input.sortOrder
       }
     });
   }
@@ -223,6 +248,9 @@ export function createTenantIsolationHarness(db: PrismaClient) {
       await db.customer.deleteMany({
         where: { organizationId: { in: trackedOrganizationIds } }
       });
+      await db.acquisitionChannel.deleteMany({
+        where: { organizationId: { in: trackedOrganizationIds } }
+      });
       await db.branchMembership.deleteMany({
         where: { organizationId: { in: trackedOrganizationIds } }
       });
@@ -255,6 +283,7 @@ export function createTenantIsolationHarness(db: PrismaClient) {
     createBranch: createTenantBranch,
     createUser: createTenantUser,
     createCustomer: createTenantCustomer,
+    createAcquisitionChannel: createTenantAcquisitionChannel,
     createOrganizationMembership: createTenantOrganizationMembership,
     createBranchMembership: createTenantBranchMembership,
     createTenantScope,

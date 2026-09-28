@@ -245,6 +245,15 @@ export function createTenantIsolationHarness(db: PrismaClient) {
     const trackedUserIds = [...userIds];
 
     if (trackedOrganizationIds.length > 0) {
+      await db.promotionCode.deleteMany({
+        where: { organizationId: { in: trackedOrganizationIds } }
+      });
+      await db.promotionBranch.deleteMany({
+        where: { organizationId: { in: trackedOrganizationIds } }
+      });
+      await db.promotion.deleteMany({
+        where: { organizationId: { in: trackedOrganizationIds } }
+      });
       await db.customer.deleteMany({
         where: { organizationId: { in: trackedOrganizationIds } }
       });

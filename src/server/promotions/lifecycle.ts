@@ -185,7 +185,6 @@ export async function createPromotion(db: PrismaClient, input: CreatePromotionIn
           branchIds.length > 0
             ? {
                 create: branchIds.map((branchId) => ({
-                  organizationId: input.organizationId,
                   branchId
                 }))
               }

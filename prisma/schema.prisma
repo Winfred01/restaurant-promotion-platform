@@ -41,6 +41,31 @@ enum AcquisitionChannelStatus {
   ARCHIVED
 }
 
+enum PromotionStatus {
+  DRAFT
+  SCHEDULED
+  ACTIVE
+  PAUSED
+  ENDED
+  ARCHIVED
+}
+
+enum PromotionRewardType {
+  FIXED_AMOUNT
+  PERCENTAGE
+  SPEND_THRESHOLD
+}
+
+enum PromotionCodeType {
+  SHARED
+  UNIQUE
+}
+
+enum PromotionCodeStatus {
+  ACTIVE
+  ARCHIVED
+}
+
 model RestaurantOrganization {
   id                      String                       @id @default(cuid())
   name                    String
@@ -52,6 +77,9 @@ model RestaurantOrganization {
   branches                Branch[]
   customers               Customer[]
   organizationMemberships OrganizationMembership[]
+  promotions              Promotion[]
+  promotionBranches       PromotionBranch[]
+  promotionCodes          PromotionCode[]
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
 
@@ -103,6 +131,7 @@ model Branch {
   timezone          String                 @default("America/Toronto")
   status            BranchStatus           @default(ACTIVE)
   branchMemberships BranchMembership[]
+  promotionBranches PromotionBranch[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -133,6 +162,7 @@ model OrganizationMembership {
   role              MembershipRole
   status            MembershipStatus       @default(ACTIVE)
   branchMemberships BranchMembership[]
+  createdPromotions Promotion[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -156,4 +186,64 @@ model BranchMembership {
   @@unique([branchId, userId])
   @@index([organizationId, userId, status])
   @@index([organizationId, branchId, status, role])
+}
+
+model Promotion {
+  id                   String                 @id @default(cuid())
+  organizationId       String
+  organization         RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  name                 String
+  description          String?
+  status               PromotionStatus        @default(DRAFT)
+  rewardType           PromotionRewardType
+  discountCents        Int?
+  discountPercent      Int?
+  maxDiscountCents     Int?
+  minimumSpendCents    Int?
+  validFrom            DateTime?
+  validUntil           DateTime?
+  appliesToAllBranches Boolean                @default(true)
+  createdByUserId      String
+  createdByMembership  OrganizationMembership @relation(fields: [organizationId, createdByUserId], references: [organizationId, userId], onDelete: Restrict, onUpdate: Cascade)
+  branches             PromotionBranch[]
+  codes                PromotionCode[]
+  createdAt            DateTime               @default(now())
+  updatedAt            DateTime               @updatedAt
+
+  @@unique([id, organizationId])
+  @@index([organizationId, status, validFrom, validUntil])
+  @@index([organizationId, rewardType])
+  @@index([organizationId, createdByUserId])
+}
+
+model PromotionBranch {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  promotionId    String
+  promotion      Promotion             @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  branchId       String
+  branch         Branch                @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  createdAt      DateTime              @default(now())
+
+  @@unique([id, organizationId])
+  @@unique([promotionId, branchId])
+  @@index([organizationId, branchId])
+}
+
+model PromotionCode {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  promotionId    String
+  promotion      Promotion             @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  code           String
+  codeType       PromotionCodeType
+  status         PromotionCodeStatus   @default(ACTIVE)
+  createdAt      DateTime              @default(now())
+  updatedAt      DateTime              @updatedAt
+
+  @@unique([id, organizationId])
+  @@unique([organizationId, code])
+  @@index([organizationId, promotionId, status])
 }

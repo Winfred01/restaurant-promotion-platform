@@ -80,6 +80,7 @@ model RestaurantOrganization {
   promotions              Promotion[]
   promotionBranches       PromotionBranch[]
   promotionCodes          PromotionCode[]
+  auditLogs               AuditLog[]
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
 
@@ -132,6 +133,7 @@ model Branch {
   status            BranchStatus           @default(ACTIVE)
   branchMemberships BranchMembership[]
   promotionBranches PromotionBranch[]
+  auditLogs          AuditLog[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -163,6 +165,7 @@ model OrganizationMembership {
   status            MembershipStatus       @default(ACTIVE)
   branchMemberships BranchMembership[]
   createdPromotions Promotion[]
+  auditLogs         AuditLog[]              @relation("AuditActor")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -207,6 +210,7 @@ model Promotion {
   createdByMembership  OrganizationMembership @relation(fields: [organizationId, createdByUserId], references: [organizationId, userId], onDelete: Restrict, onUpdate: Cascade)
   branches             PromotionBranch[]
   codes                PromotionCode[]
+  auditLogs            AuditLog[]
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
@@ -246,4 +250,30 @@ model PromotionCode {
   @@unique([id, organizationId])
   @@unique([organizationId, code])
   @@index([organizationId, promotionId, status])
+}
+
+model AuditLog {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  organization    RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  branchId        String?
+  branch          Branch?                @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  actorUserId     String
+  actorMembership OrganizationMembership @relation("AuditActor", fields: [organizationId, actorUserId], references: [organizationId, userId], onDelete: Restrict, onUpdate: Cascade)
+  actorRole       MembershipRole
+  action          String
+  entityType      String
+  entityId        String
+  promotionId     String?
+  promotion       Promotion?             @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  reason          String?
+  beforeJson      Json?
+  afterJson       Json?
+  metadataJson    Json?
+  createdAt       DateTime               @default(now())
+
+  @@index([organizationId, createdAt])
+  @@index([organizationId, entityType, entityId])
+  @@index([actorUserId, createdAt])
+  @@index([organizationId, promotionId, createdAt])
 }

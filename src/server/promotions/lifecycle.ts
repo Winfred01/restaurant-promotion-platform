@@ -5,11 +5,9 @@ import {
   type PrismaClient
 } from "@prisma/client";
 
-type DatabaseClient = PrismaClient | Prisma.TransactionClient;
+export type PromotionPersistence = PrismaClient | Prisma.TransactionClient;
 
-type BasePromotionInput = {
-  organizationId: string;
-  createdByUserId: string;
+type BasePromotionDefinitionInput = {
   name: string;
   description?: string;
   validFrom?: Date;
@@ -35,8 +33,13 @@ type SpendThresholdReward = {
   minimumSpendCents: number;
 };
 
-export type CreatePromotionInput = BasePromotionInput &
+export type PromotionDefinitionInput = BasePromotionDefinitionInput &
   (FixedAmountReward | PercentageReward | SpendThresholdReward);
+
+export type CreatePromotionInput = PromotionDefinitionInput & {
+  organizationId: string;
+  createdByUserId: string;
+};
 
 export class PromotionValidationError extends Error {
   constructor(message = "Promotion details are invalid.") {
@@ -83,7 +86,7 @@ function validatePositiveInteger(value: number | undefined) {
   return value !== undefined && Number.isSafeInteger(value) && value > 0;
 }
 
-function validatePromotionInput(input: CreatePromotionInput) {
+export function validatePromotionInput(input: PromotionDefinitionInput) {
   if (!input.name.trim()) {
     throw new PromotionValidationError("Promotion name is required.");
   }
@@ -117,7 +120,7 @@ function validatePromotionInput(input: CreatePromotionInput) {
   }
 }
 
-function normalizeBranchTargets(input: CreatePromotionInput) {
+export function normalizeBranchTargets(input: PromotionDefinitionInput) {
   const branchIds = [...new Set((input.branchIds ?? []).map((id) => id.trim()).filter(Boolean))];
 
   if (input.appliesToAllBranches && branchIds.length > 0) {
@@ -135,70 +138,100 @@ function normalizeBranchTargets(input: CreatePromotionInput) {
   return branchIds;
 }
 
-export async function createPromotion(db: PrismaClient, input: CreatePromotionInput) {
+export function promotionDefinitionData(input: PromotionDefinitionInput) {
   validatePromotionInput(input);
-  const branchIds = normalizeBranchTargets(input);
+  normalizeBranchTargets(input);
 
-  return db.$transaction(async (transaction) => {
-    if (branchIds.length > 0) {
-      const matchingBranches = await transaction.branch.count({
-        where: {
-          organizationId: input.organizationId,
-          id: { in: branchIds }
+  const rewardData =
+    input.rewardType === PromotionRewardType.PERCENTAGE
+      ? {
+          rewardType: input.rewardType,
+          discountCents: null,
+          discountPercent: input.discountPercent,
+          maxDiscountCents: input.maxDiscountCents ?? null,
+          minimumSpendCents: null
         }
-      });
-
-      if (matchingBranches !== branchIds.length) {
-        throw new PromotionTargetingError("One or more branch targets are unavailable.");
-      }
-    }
-
-    const rewardData =
-      input.rewardType === PromotionRewardType.PERCENTAGE
+      : input.rewardType === PromotionRewardType.SPEND_THRESHOLD
         ? {
             rewardType: input.rewardType,
-            discountPercent: input.discountPercent,
-            maxDiscountCents: input.maxDiscountCents
+            discountCents: input.discountCents,
+            discountPercent: null,
+            maxDiscountCents: null,
+            minimumSpendCents: input.minimumSpendCents
           }
-        : input.rewardType === PromotionRewardType.SPEND_THRESHOLD
-          ? {
-              rewardType: input.rewardType,
-              discountCents: input.discountCents,
-              minimumSpendCents: input.minimumSpendCents
-            }
-          : {
-              rewardType: input.rewardType,
-              discountCents: input.discountCents
-            };
+        : {
+            rewardType: input.rewardType,
+            discountCents: input.discountCents,
+            discountPercent: null,
+            maxDiscountCents: null,
+            minimumSpendCents: null
+          };
 
-    return transaction.promotion.create({
-      data: {
-        organizationId: input.organizationId,
-        createdByUserId: input.createdByUserId,
-        name: input.name.trim(),
-        description: input.description?.trim() || null,
-        validFrom: input.validFrom,
-        validUntil: input.validUntil,
-        appliesToAllBranches: input.appliesToAllBranches,
-        ...rewardData,
-        branches:
-          branchIds.length > 0
-            ? {
-                create: branchIds.map((branchId) => ({
-                  branchId
-                }))
-              }
-            : undefined
-      },
-      include: {
-        branches: { orderBy: { branchId: "asc" } }
-      }
-    });
+  return {
+    name: input.name.trim(),
+    description: input.description?.trim() || null,
+    validFrom: input.validFrom ?? null,
+    validUntil: input.validUntil ?? null,
+    appliesToAllBranches: input.appliesToAllBranches,
+    ...rewardData
+  };
+}
+
+export async function requireAvailablePromotionBranches(
+  db: PromotionPersistence,
+  input: { organizationId: string; branchIds: string[] }
+) {
+  if (input.branchIds.length === 0) {
+    return;
+  }
+
+  const matchingBranches = await db.branch.count({
+    where: {
+      organizationId: input.organizationId,
+      id: { in: input.branchIds }
+    }
+  });
+
+  if (matchingBranches !== input.branchIds.length) {
+    throw new PromotionTargetingError("One or more branch targets are unavailable.");
+  }
+}
+
+export async function createPromotionRecord(db: PromotionPersistence, input: CreatePromotionInput) {
+  const branchIds = normalizeBranchTargets(input);
+  await requireAvailablePromotionBranches(db, {
+    organizationId: input.organizationId,
+    branchIds
+  });
+
+  return db.promotion.create({
+    data: {
+      organizationId: input.organizationId,
+      createdByUserId: input.createdByUserId,
+      ...promotionDefinitionData(input),
+      branches:
+        branchIds.length > 0
+          ? {
+              create: branchIds.map((branchId) => ({
+                branchId
+              }))
+            }
+          : undefined
+    },
+    include: {
+      branches: { orderBy: { branchId: "asc" } }
+    }
   });
 }
 
+export async function createPromotion(db: PrismaClient, input: CreatePromotionInput) {
+  validatePromotionInput(input);
+  normalizeBranchTargets(input);
+  return db.$transaction((transaction) => createPromotionRecord(transaction, input));
+}
+
 export async function transitionPromotionStatus(
-  db: DatabaseClient,
+  db: PromotionPersistence,
   input: {
     organizationId: string;
     promotionId: string;

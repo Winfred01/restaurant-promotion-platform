@@ -79,11 +79,11 @@ export type PromotionLifecycleManagementInput = ActorInput & {
   reason?: string;
 };
 
-type PromotionWithBranches = Prisma.PromotionGetPayload<{
+export type PromotionWithBranches = Prisma.PromotionGetPayload<{
   include: { branches: { select: { branchId: true } } };
 }>;
 
-type PromotionAuthorizationContext = ActorInput & {
+export type PromotionAuthorizationContext = ActorInput & {
   role: MembershipRole;
   auditBranchId: string | null;
 };
@@ -99,14 +99,14 @@ function parseDefinition(input: PromotionDefinitionInput) {
   return promotionDefinitionSchema.parse(input) as PromotionDefinitionInput;
 }
 
-function promotionTarget(promotion: PromotionWithBranches) {
+export function promotionTarget(promotion: PromotionWithBranches) {
   return {
     appliesToAllBranches: promotion.appliesToAllBranches,
     branchIds: promotion.branches.map(({ branchId }) => branchId)
   };
 }
 
-async function authorizeTarget(
+export async function authorizePromotionTarget(
   db: PromotionPersistence,
   actor: ActorInput,
   target: { appliesToAllBranches: boolean; branchIds: string[] }
@@ -171,7 +171,7 @@ function snapshotPromotion(promotion: PromotionWithBranches) {
   };
 }
 
-async function loadPromotion(
+export async function loadPromotion(
   db: PromotionPersistence,
   input: { organizationId: string; promotionId: string }
 ) {
@@ -242,7 +242,7 @@ export function createPromotionManagementService(db: PrismaClient) {
       const branchIds = normalizeBranchTargets(definition);
 
       return db.$transaction(async (transaction) => {
-        const context = await authorizeTarget(
+        const context = await authorizePromotionTarget(
           transaction,
           { organizationId, actorUserId },
           {
@@ -272,12 +272,12 @@ export function createPromotionManagementService(db: PrismaClient) {
       return db.$transaction(async (transaction) => {
         const existing = await loadPromotion(transaction, { organizationId, promotionId });
         const existingTarget = promotionTarget(existing);
-        const existingContext = await authorizeTarget(
+        const existingContext = await authorizePromotionTarget(
           transaction,
           { organizationId, actorUserId },
           existingTarget
         );
-        const nextContext = await authorizeTarget(
+        const nextContext = await authorizePromotionTarget(
           transaction,
           { organizationId, actorUserId },
           {
@@ -352,7 +352,7 @@ export function createPromotionManagementService(db: PrismaClient) {
 
     return db.$transaction(async (transaction) => {
       const existing = await loadPromotion(transaction, parsedInput);
-      const context = await authorizeTarget(
+      const context = await authorizePromotionTarget(
         transaction,
         {
           organizationId: parsedInput.organizationId,

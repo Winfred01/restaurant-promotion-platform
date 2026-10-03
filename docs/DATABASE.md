@@ -79,6 +79,11 @@ Indexes:
 
 Permanent bill-level redemption record. Fields: `id`, `organizationId`, `branchId`, `customerId`, `promotionId`, `promotionCodeId`, `claimId`, `redeemedByUserId`, `receiptNumber`, `billSubtotalCents`, `discountCents`, `netBillCents`, `status`, `redeemedAt`, `voidedAt`.
 
+The eligibility stage initially persists only the tenant-safe identity, optional Promotion Code,
+status, and redemption timestamp needed to read prior successful use. Checkout amounts, receipt,
+actor, claim, duplicate constraints, concurrency handling, and void workflow fields are added by
+their dedicated redemption issues; the eligibility service does not create or mutate these rows.
+
 Constraints:
 
 - Unique partial `(customerId, promotionId)` where `status = COMPLETED`.

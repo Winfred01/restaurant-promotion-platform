@@ -62,6 +62,13 @@ v0.1 rewards: fixed amount, percentage with optional max discount, and spend thr
 
 Output: eligible/ineligible, reason codes, discount amount, net amount, and Best Deal flag. Best Deal is advisory only.
 
+Eligibility treats `validFrom` and `validUntil` as inclusive instants. Percentage savings are
+calculated entirely in integer cents and rounded to the nearest cent, with an exact half cent
+rounded up. Any maximum discount is applied after rounding, and every discount is clamped to the
+bill subtotal so the final amount cannot be negative. Ineligibility reasons are returned in a
+stable order: lifecycle, dates, branch targeting, spend threshold, code availability, then prior
+successful redemption.
+
 ## Redemption Transaction Handling
 
 Redemption runs in a database transaction:

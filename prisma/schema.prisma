@@ -66,6 +66,11 @@ enum PromotionCodeStatus {
   ARCHIVED
 }
 
+enum RedemptionStatus {
+  COMPLETED
+  VOIDED
+}
+
 model RestaurantOrganization {
   id                      String                       @id @default(cuid())
   name                    String
@@ -80,6 +85,7 @@ model RestaurantOrganization {
   promotions              Promotion[]
   promotionBranches       PromotionBranch[]
   promotionCodes          PromotionCode[]
+  redemptions             Redemption[]
   auditLogs               AuditLog[]
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
@@ -105,18 +111,19 @@ model AcquisitionChannel {
 }
 
 model Customer {
-  id                    String                  @id @default(cuid())
+  id                    String                 @id @default(cuid())
   organizationId        String
   organization          RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   acquisitionChannelId  String?
-  acquisitionChannel    AcquisitionChannel?     @relation(fields: [acquisitionChannelId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  acquisitionChannel    AcquisitionChannel?    @relation(fields: [acquisitionChannelId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
   phoneNumberRaw        String
   phoneNumberNormalized String
   phoneNumberDisplay    String
-  firstSeenAt           DateTime                @default(now())
-  lastSeenAt            DateTime                @default(now())
-  createdAt             DateTime                @default(now())
-  updatedAt             DateTime                @updatedAt
+  firstSeenAt           DateTime               @default(now())
+  lastSeenAt            DateTime               @default(now())
+  createdAt             DateTime               @default(now())
+  updatedAt             DateTime               @updatedAt
+  redemptions           Redemption[]
 
   @@unique([id, organizationId])
   @@unique([organizationId, phoneNumberNormalized])
@@ -133,7 +140,8 @@ model Branch {
   status            BranchStatus           @default(ACTIVE)
   branchMemberships BranchMembership[]
   promotionBranches PromotionBranch[]
-  auditLogs          AuditLog[]
+  auditLogs         AuditLog[]
+  redemptions       Redemption[]
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -165,7 +173,7 @@ model OrganizationMembership {
   status            MembershipStatus       @default(ACTIVE)
   branchMemberships BranchMembership[]
   createdPromotions Promotion[]
-  auditLogs         AuditLog[]              @relation("AuditActor")
+  auditLogs         AuditLog[]             @relation("AuditActor")
   createdAt         DateTime               @default(now())
   updatedAt         DateTime               @updatedAt
 
@@ -211,6 +219,7 @@ model Promotion {
   branches             PromotionBranch[]
   codes                PromotionCode[]
   auditLogs            AuditLog[]
+  redemptions          Redemption[]
   createdAt            DateTime               @default(now())
   updatedAt            DateTime               @updatedAt
 
@@ -225,10 +234,10 @@ model PromotionBranch {
   organizationId String
   organization   RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   promotionId    String
-  promotion      Promotion             @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  promotion      Promotion              @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
   branchId       String
-  branch         Branch                @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
-  createdAt      DateTime              @default(now())
+  branch         Branch                 @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  createdAt      DateTime               @default(now())
 
   @@unique([id, organizationId])
   @@unique([promotionId, branchId])
@@ -240,16 +249,38 @@ model PromotionCode {
   organizationId String
   organization   RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
   promotionId    String
-  promotion      Promotion             @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  promotion      Promotion              @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
   code           String
   codeType       PromotionCodeType
-  status         PromotionCodeStatus   @default(ACTIVE)
-  createdAt      DateTime              @default(now())
-  updatedAt      DateTime              @updatedAt
+  status         PromotionCodeStatus    @default(ACTIVE)
+  createdAt      DateTime               @default(now())
+  updatedAt      DateTime               @updatedAt
+  redemptions    Redemption[]
 
   @@unique([id, organizationId])
+  @@unique([id, organizationId, promotionId])
   @@unique([organizationId, code])
   @@index([organizationId, promotionId, status])
+}
+
+model Redemption {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  organization    RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  branchId        String
+  branch          Branch                 @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  customerId      String
+  customer        Customer               @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  promotionId     String
+  promotion       Promotion              @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  promotionCodeId String?
+  promotionCode   PromotionCode?         @relation(fields: [promotionCodeId, organizationId, promotionId], references: [id, organizationId, promotionId], onDelete: Restrict, onUpdate: Cascade)
+  status          RedemptionStatus       @default(COMPLETED)
+  redeemedAt      DateTime               @default(now())
+
+  @@unique([id, organizationId])
+  @@index([organizationId, customerId, promotionId, status])
+  @@index([organizationId, branchId, status])
 }
 
 model AuditLog {

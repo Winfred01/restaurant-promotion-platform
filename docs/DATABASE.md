@@ -75,6 +75,12 @@ Indexes:
 - `(organizationId, customerId, status)`.
 - `(organizationId, promotionId, status)`.
 
+The active-claim uniqueness is a PostgreSQL partial unique index on
+`(organizationId, customerId, promotionId)` where `status = CLAIMED`. Claim rows are retained when
+their status changes; all claim foreign keys use organization-scoped relationships with `RESTRICT`
+deletion. The staff-assisted service sets source `STAFF` and writes an audit record in the same
+transaction. Bill subtotal and spend-threshold checks occur again at checkout.
+
 ### Redemption
 
 Permanent bill-level redemption record. Fields: `id`, `organizationId`, `branchId`, `customerId`, `promotionId`, `promotionCodeId`, `claimId`, `redeemedByUserId`, `receiptNumber`, `billSubtotalCents`, `discountCents`, `netBillCents`, `status`, `redeemedAt`, `voidedAt`.

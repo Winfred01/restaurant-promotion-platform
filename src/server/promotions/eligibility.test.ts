@@ -11,6 +11,7 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
 import { createTenantIsolationHarness } from "@/test-support/tenant-isolation";
 import {
+  calculatePromotionClaimEligibility,
   calculatePromotionEligibility,
   createPromotionEligibilityService,
   PromotionEligibilityReason,
@@ -49,6 +50,18 @@ function eligibilityFacts(
 }
 
 describe("promotion eligibility calculations", () => {
+  it("defers a spend threshold when a claim is made before checkout", () => {
+    expect(
+      calculatePromotionClaimEligibility(
+        eligibilityFacts({
+          rewardType: PromotionRewardType.SPEND_THRESHOLD,
+          minimumSpendCents: 5_000,
+          billSubtotalCents: 0
+        })
+      )
+    ).toEqual({ eligible: true, reasonCodes: [] });
+  });
+
   it("calculates fixed-amount discounts in cents", () => {
     expect(calculatePromotionEligibility(eligibilityFacts())).toEqual({
       promotionId: "promotion-id",

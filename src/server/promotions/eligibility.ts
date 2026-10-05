@@ -201,6 +201,20 @@ export function calculatePromotionEligibility(
   };
 }
 
+/** Check claim-time eligibility before the bill subtotal exists. Spend thresholds are rechecked at checkout. */
+export function calculatePromotionClaimEligibility(
+  input: Omit<PromotionEligibilityFacts, "billSubtotalCents">
+): Pick<PromotionEligibilityResult, "eligible" | "reasonCodes"> {
+  const billSubtotalCents =
+    input.rewardType === PromotionRewardType.SPEND_THRESHOLD ? (input.minimumSpendCents ?? 0) : 0;
+  const { eligible, reasonCodes } = calculatePromotionEligibility({
+    ...input,
+    billSubtotalCents
+  });
+
+  return { eligible, reasonCodes };
+}
+
 export function createPromotionEligibilityService(db: PrismaClient) {
   return {
     async evaluate(input: EvaluatePromotionsInput) {

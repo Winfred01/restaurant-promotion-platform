@@ -69,6 +69,11 @@ bill subtotal so the final amount cannot be negative. Ineligibility reasons are 
 stable order: lifecycle, dates, branch targeting, spend threshold, code availability, then prior
 successful redemption.
 
+Best Deal marks exactly one eligible promotion with the highest immediate discount in cents.
+Equal savings are resolved by the smallest `promotionId` (then the first occurrence if IDs match),
+independent of candidate order. An eligible zero-savings offer may be marked when it is the best
+available; no ineligible offer is marked. The flag is advisory and never redeems an offer.
+
 ## Redemption Transaction Handling
 
 Redemption runs in a database transaction:

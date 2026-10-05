@@ -9,6 +9,7 @@ import { z } from "zod";
 
 import { createPrismaAuthorizationGuard } from "@/server/authorization/guard";
 import { Permission } from "@/server/authorization/permissions";
+import { markBestDeal } from "./best-deal";
 
 export const PromotionEligibilityReason = {
   STATUS_DRAFT: "PROMOTION_STATUS_DRAFT",
@@ -270,33 +271,35 @@ export function createPromotionEligibilityService(db: PrismaClient) {
       const redeemedPromotionIds = new Set(priorRedemptions.map(({ promotionId }) => promotionId));
       const evaluatedAt = parsedInput.evaluatedAt ?? new Date();
 
-      return parsedInput.candidates.map((candidate) => {
-        const promotion = promotionsById.get(candidate.promotionId);
-        if (!promotion) {
-          throw new PromotionEligibilityUnavailableError();
-        }
+      return markBestDeal(
+        parsedInput.candidates.map((candidate) => {
+          const promotion = promotionsById.get(candidate.promotionId);
+          if (!promotion) {
+            throw new PromotionEligibilityUnavailableError();
+          }
 
-        return calculatePromotionEligibility({
-          promotionId: promotion.id,
-          status: promotion.status,
-          rewardType: promotion.rewardType,
-          discountCents: promotion.discountCents,
-          discountPercent: promotion.discountPercent,
-          maxDiscountCents: promotion.maxDiscountCents,
-          minimumSpendCents: promotion.minimumSpendCents,
-          validFrom: promotion.validFrom,
-          validUntil: promotion.validUntil,
-          appliesToAllBranches: promotion.appliesToAllBranches,
-          targetBranchIds: promotion.branches.map(({ branchId }) => branchId),
-          branchId: parsedInput.branchId,
-          billSubtotalCents: parsedInput.billSubtotalCents,
-          evaluatedAt,
-          promotionCodeAvailable: candidate.promotionCodeId
-            ? availableCodeKeys.has(`${candidate.promotionCodeId}:${candidate.promotionId}`)
-            : undefined,
-          hasPriorSuccessfulRedemption: redeemedPromotionIds.has(promotion.id)
-        });
-      });
+          return calculatePromotionEligibility({
+            promotionId: promotion.id,
+            status: promotion.status,
+            rewardType: promotion.rewardType,
+            discountCents: promotion.discountCents,
+            discountPercent: promotion.discountPercent,
+            maxDiscountCents: promotion.maxDiscountCents,
+            minimumSpendCents: promotion.minimumSpendCents,
+            validFrom: promotion.validFrom,
+            validUntil: promotion.validUntil,
+            appliesToAllBranches: promotion.appliesToAllBranches,
+            targetBranchIds: promotion.branches.map(({ branchId }) => branchId),
+            branchId: parsedInput.branchId,
+            billSubtotalCents: parsedInput.billSubtotalCents,
+            evaluatedAt,
+            promotionCodeAvailable: candidate.promotionCodeId
+              ? availableCodeKeys.has(`${candidate.promotionCodeId}:${candidate.promotionId}`)
+              : undefined,
+            hasPriorSuccessfulRedemption: redeemedPromotionIds.has(promotion.id)
+          });
+        })
+      );
     }
   };
 }

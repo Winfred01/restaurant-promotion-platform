@@ -278,7 +278,7 @@ describeWithLocalDatabase("promotion eligibility persistence and tenant isolatio
     return promotion;
   }
 
-  it("returns multiple eligible promotions without selecting a Best Deal", async () => {
+  it("marks the largest eligible promotion as the advisory Best Deal", async () => {
     const scope = await harness.createTenantScope({
       organizationRole: MembershipRole.STAFF,
       branchRole: MembershipRole.STAFF
@@ -319,14 +319,16 @@ describeWithLocalDatabase("promotion eligibility persistence and tenant isolatio
         eligible: true,
         reasonCodes: [],
         discountCents: 500,
-        finalBillCents: 1_500
+        finalBillCents: 1_500,
+        isBestDeal: true
       },
       {
         promotionId: percentage.id,
         eligible: true,
         reasonCodes: [],
         discountCents: 200,
-        finalBillCents: 1_800
+        finalBillCents: 1_800,
+        isBestDeal: false
       }
     ]);
   });

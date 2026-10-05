@@ -165,7 +165,6 @@ export function createStaffPromotionClaimService(
                 action: "PROMOTION_CLAIM_CREATED",
                 entityType: "CustomerPromotionClaim",
                 entityId: claim.id,
-                promotionId: claim.promotionId,
                 afterJson: {
                   customerId: claim.customerId,
                   promotionId: claim.promotionId,

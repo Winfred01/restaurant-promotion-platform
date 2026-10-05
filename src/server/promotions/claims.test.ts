@@ -147,7 +147,7 @@ describeWithLocalDatabase("staff promotion claims and tenant isolation", () => {
       actorUserId: scope.user.id,
       actorRole: MembershipRole.STAFF,
       action: "PROMOTION_CLAIM_CREATED",
-      promotionId: promotion.id
+      promotionId: null
     });
     expect(JSON.stringify(audit)).not.toContain(customer.phoneNumberNormalized);
   });

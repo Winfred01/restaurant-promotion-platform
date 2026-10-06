@@ -16,7 +16,8 @@
     "prisma:generate": "prisma generate",
     "prisma:migrate:dev": "prisma migrate dev",
     "prisma:migrate:deploy": "prisma migrate deploy",
-    "prisma:validate": "prisma validate"
+    "prisma:validate": "prisma validate",
+    "seed:demo": "node --experimental-strip-types scripts/seed-demo.ts"
   },
   "dependencies": {
     "@node-rs/argon2": "2.2.1",

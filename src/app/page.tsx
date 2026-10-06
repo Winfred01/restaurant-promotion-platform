@@ -6,6 +6,12 @@ export default function Home() {
       <p className="mt-4 max-w-2xl text-base leading-7 text-slate-700">
         The application shell is ready for the planned v0.1 implementation issues.
       </p>
+      <a
+        className="mt-8 w-fit rounded-xl bg-teal-800 px-5 py-3 font-semibold text-white hover:bg-teal-900"
+        href="/login"
+      >
+        Employee sign in
+      </a>
     </main>
   );
 }

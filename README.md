@@ -4,6 +4,44 @@ English | [简体中文](README.zh-CN.md)
 
 A multi-tenant SaaS platform for restaurants to create promotions, manage coupon redemption, capture new-customer acquisition sources, and measure how promotions contribute to revenue.
 
+## Employee demo login
+
+The app has an employee login at `/login`. To create a separate, disposable demo tenant with
+Owner, Manager, and Staff accounts, first provision a PostgreSQL database whose name includes
+`demo`. Apply migrations, then run the seed once. The seed refuses production mode, requires an
+explicit database-name confirmation, and stops without changes if its organization or account
+emails already exist. It creates no real customer data and never writes the password to the repo.
+
+In PowerShell, set runtime values for your dedicated demo database:
+
+```powershell
+$env:DATABASE_URL = "postgresql://localhost:5432/restaurant_promotion_demo?schema=public"
+$env:DEMO_SEED_DATABASE = "restaurant_promotion_demo"
+$env:DEMO_SEED_CONFIRM = "restaurant-demo"
+$env:DEMO_SEED_PASSWORD = [System.Net.NetworkCredential]::new("", (Read-Host "Demo password" -AsSecureString)).Password
+npm.cmd run prisma:migrate:deploy
+npm.cmd run seed:demo
+$env:AUTH_SECRET = [Convert]::ToBase64String([Security.Cryptography.RandomNumberGenerator]::GetBytes(32))
+$env:AUTH_URL = "http://localhost:3000"
+$env:DEMO_LOGIN_ENABLED = "1"
+npm.cmd run dev
+```
+
+Choose a password of at least 16 characters. Use a dedicated database credential in
+`DATABASE_URL` if required; keep it in the runtime environment, never in a committed file.
+`DEMO_LOGIN_ENABLED=1` displays the demo account names on the login page; it does not create
+accounts or bypass authentication. The three email addresses are:
+
+| Role | Email | Access |
+| --- | --- | --- |
+| Owner | `owner@restaurant-demo.example.com` | Restaurant-wide Owner membership |
+| Manager | `manager@restaurant-demo.example.com` | Manager membership at Downtown Demo branch |
+| Staff | `staff@restaurant-demo.example.com` | Staff membership at Downtown Demo branch |
+
+All three use the password supplied at seed time. After sign-in, `/demo` confirms the employee's
+current role and supports sign-out. The full application shell and business workflows have their
+own issues and are not represented as working on this page. Customers have no login.
+
 ## Product Vision
 
 Most small and mid-sized restaurants can create discounts, but they often cannot answer the more important questions:

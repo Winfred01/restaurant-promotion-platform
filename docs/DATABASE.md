@@ -85,10 +85,17 @@ transaction. Bill subtotal and spend-threshold checks occur again at checkout.
 
 Permanent bill-level redemption record. Fields: `id`, `organizationId`, `branchId`, `customerId`, `promotionId`, `promotionCodeId`, `claimId`, `redeemedByUserId`, `receiptNumber`, `billSubtotalCents`, `discountCents`, `netBillCents`, `status`, `redeemedAt`, `voidedAt`.
 
-The eligibility stage initially persists only the tenant-safe identity, optional Promotion Code,
-status, and redemption timestamp needed to read prior successful use. Checkout amounts, receipt,
-actor, claim, duplicate constraints, concurrency handling, and void workflow fields are added by
-their dedicated redemption issues; the eligibility service does not create or mutate these rows.
+The eligibility stage initially persisted only the tenant-safe identity, optional Promotion Code,
+status, and redemption timestamp needed to read prior successful use. The eligibility service
+does not create or mutate these rows.
+
+Checkout redemption now records an optional same-tenant, same-branch customer/promotion claim,
+the employee actor, entered and normalized receipt number, bill subtotal, discount, and net bill
+amount in integer cents. Existing eligibility-history rows retain nullable checkout fields; the
+checkout service always writes them. It rechecks branch permission and eligibility within a
+serializable transaction, consumes a supplied active claim, and appends an audit record. The
+database partial unique indexes for completed customer/promotion and active branch receipt are
+tracked by Issue #18.
 
 Constraints:
 

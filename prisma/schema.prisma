@@ -188,6 +188,7 @@ model OrganizationMembership {
   branchMemberships BranchMembership[]
   createdPromotions Promotion[]
   promotionClaims   CustomerPromotionClaim[]
+  redemptions       Redemption[]             @relation("RedemptionActor")
   auditLogs         AuditLog[]               @relation("AuditActor")
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -298,30 +299,43 @@ model CustomerPromotionClaim {
   status              PromotionClaimStatus   @default(CLAIMED)
   claimedAt           DateTime               @default(now())
   updatedAt           DateTime               @updatedAt
+  redemptions         Redemption[]
 
   @@unique([id, organizationId])
+  @@unique([id, organizationId, branchId, customerId, promotionId])
   @@index([organizationId, customerId, status])
   @@index([organizationId, promotionId, status])
 }
 
 model Redemption {
-  id              String                 @id @default(cuid())
-  organizationId  String
-  organization    RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
-  branchId        String
-  branch          Branch                 @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
-  customerId      String
-  customer        Customer               @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
-  promotionId     String
-  promotion       Promotion              @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
-  promotionCodeId String?
-  promotionCode   PromotionCode?         @relation(fields: [promotionCodeId, organizationId, promotionId], references: [id, organizationId, promotionId], onDelete: Restrict, onUpdate: Cascade)
-  status          RedemptionStatus       @default(COMPLETED)
-  redeemedAt      DateTime               @default(now())
+  id                      String                  @id @default(cuid())
+  organizationId          String
+  organization            RestaurantOrganization  @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  branchId                String
+  branch                  Branch                  @relation(fields: [branchId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  customerId              String
+  customer                Customer                @relation(fields: [customerId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  promotionId             String
+  promotion               Promotion               @relation(fields: [promotionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  promotionCodeId         String?
+  promotionCode           PromotionCode?          @relation(fields: [promotionCodeId, organizationId, promotionId], references: [id, organizationId, promotionId], onDelete: Restrict, onUpdate: Cascade)
+  claimId                 String?
+  claim                   CustomerPromotionClaim? @relation(fields: [claimId, organizationId, branchId, customerId, promotionId], references: [id, organizationId, branchId, customerId, promotionId], onDelete: Restrict, onUpdate: Cascade)
+  redeemedByUserId        String?
+  redeemedByMembership    OrganizationMembership? @relation("RedemptionActor", fields: [organizationId, redeemedByUserId], references: [organizationId, userId], onDelete: Restrict, onUpdate: Cascade)
+  receiptNumber           String?
+  normalizedReceiptNumber String?
+  billSubtotalCents       Int?
+  discountCents           Int?
+  netBillCents            Int?
+  status                  RedemptionStatus        @default(COMPLETED)
+  redeemedAt              DateTime                @default(now())
 
   @@unique([id, organizationId])
   @@index([organizationId, customerId, promotionId, status])
   @@index([organizationId, branchId, status])
+  @@index([organizationId, branchId, normalizedReceiptNumber, status])
+  @@index([organizationId, claimId])
 }
 
 model AuditLog {

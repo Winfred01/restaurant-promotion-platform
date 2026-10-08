@@ -38,9 +38,11 @@ accounts or bypass authentication. The three email addresses are:
 | Manager | `manager@restaurant-demo.example.com` | Manager membership at Downtown Demo branch |
 | Staff | `staff@restaurant-demo.example.com` | Staff membership at Downtown Demo branch |
 
-All three use the password supplied at seed time. After sign-in, `/demo` confirms the employee's
-current role and supports sign-out. The full application shell and business workflows have their
-own issues and are not represented as working on this page. Customers have no login.
+All three use the password supplied at seed time. After sign-in, `/app` lists the branches available
+to the employee and opens an authenticated workspace with role-aware navigation and sign-out.
+`/demo` redirects to `/app`. Staff, Manager, and Owner areas show their current access and clearly
+label business screens that are still planned; they do not process claims or redemptions. Customers
+have no login.
 
 ## Product Vision
 

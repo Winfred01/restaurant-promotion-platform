@@ -32,7 +32,7 @@ export function LoginForm({ showDemoAccounts }: { showDemoAccounts: boolean }) {
         return;
       }
 
-      window.location.assign("/demo");
+      window.location.assign("/app");
     } catch {
       setError("Sign in is unavailable right now. Please try again.");
     } finally {

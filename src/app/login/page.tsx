@@ -7,7 +7,7 @@ export default async function LoginPage() {
   const session = await getCurrentEmployeeSession();
 
   if (session) {
-    redirect("/demo");
+    redirect("/app");
   }
 
   return <LoginForm showDemoAccounts={process.env.DEMO_LOGIN_ENABLED === "1"} />;

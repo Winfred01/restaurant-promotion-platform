@@ -95,7 +95,12 @@ amount in integer cents. Existing eligibility-history rows retain nullable check
 checkout service always writes them. It rechecks branch permission and eligibility within a
 serializable transaction, consumes a supplied active claim, and appends an audit record. The
 database partial unique indexes for completed customer/promotion and active branch receipt are
-tracked by Issue #18.
+created by the Issue #18 migration. They cover only `COMPLETED` rows: one per
+`(organizationId, customerId, promotionId)`, and one per
+`(organizationId, branchId, normalizedReceiptNumber)` when the normalized receipt is present.
+`VOIDED` rows remain in history and do not block corrected redemption. Existing eligibility-history
+rows with a null receipt remain valid. Prisma schema cannot represent these partial indexes in
+version `6.12.0`, so keep the migration indexes when changing the model.
 
 Constraints:
 

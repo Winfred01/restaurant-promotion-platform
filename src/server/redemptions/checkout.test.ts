@@ -280,6 +280,50 @@ describeWithLocalDatabase("checkout redemption transaction", () => {
     await expect(db.redemption.count()).resolves.toBe(1);
   });
 
+  it("allows exactly one concurrent duplicate redemption and one audit", async () => {
+    const scope = await harness.createTenantScope();
+    const customer = await harness.createCustomer(scope.organization);
+    const promotion = await activePromotion({
+      organizationId: scope.organization.id,
+      userId: scope.user.id,
+      name: "Concurrent redemption offer"
+    });
+    const input = {
+      organizationId: scope.organization.id,
+      actorUserId: scope.user.id,
+      branchId: scope.branch.id,
+      customerId: customer.id,
+      promotionId: promotion.id,
+      receiptNumber: "CONCURRENT-1",
+      billSubtotalCents: 2_000
+    };
+
+    const outcomes = await Promise.allSettled([service.create(input), service.create(input)]);
+
+    expect(outcomes.filter((outcome) => outcome.status === "fulfilled")).toHaveLength(1);
+    expect(outcomes.filter((outcome) => outcome.status === "rejected")).toMatchObject([
+      { reason: expect.any(RedemptionConflictError) }
+    ]);
+    await expect(
+      db.redemption.count({
+        where: {
+          organizationId: scope.organization.id,
+          customerId: customer.id,
+          promotionId: promotion.id,
+          status: "COMPLETED"
+        }
+      })
+    ).resolves.toBe(1);
+    await expect(
+      db.auditLog.count({
+        where: {
+          organizationId: scope.organization.id,
+          action: "REDEMPTION_CREATED"
+        }
+      })
+    ).resolves.toBe(1);
+  });
+
   it("enforces completed-only uniqueness in PostgreSQL and allows branch receipt reuse", async () => {
     const scope = await harness.createTenantScope();
     const otherBranch = await harness.createBranch(scope.organization);

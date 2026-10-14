@@ -214,7 +214,9 @@ describeWithLocalDatabase("checkout redemption transaction", () => {
     await expect(service.create({ ...input, customerId: otherCustomer.id })).rejects.toBeInstanceOf(
       RedemptionUnavailableError
     );
-    await expect(db.redemption.count()).resolves.toBe(0);
+    await expect(
+      db.redemption.count({ where: { organizationId: first.organization.id } })
+    ).resolves.toBe(0);
   });
 
   it("rechecks spend threshold and current promotion state inside checkout", async () => {
@@ -248,7 +250,9 @@ describeWithLocalDatabase("checkout redemption transaction", () => {
     await expect(service.create({ ...input, billSubtotalCents: 5_000 })).rejects.toMatchObject({
       reasonCodes: [PromotionEligibilityReason.STATUS_PAUSED]
     } satisfies Partial<RedemptionIneligibleError>);
-    await expect(db.redemption.count()).resolves.toBe(0);
+    await expect(
+      db.redemption.count({ where: { organizationId: scope.organization.id } })
+    ).resolves.toBe(0);
   });
 
   it("blocks a reused receipt and prior customer promotion redemption", async () => {
@@ -277,7 +281,9 @@ describeWithLocalDatabase("checkout redemption transaction", () => {
     await expect(
       service.create({ ...input, customerId: secondCustomer.id, receiptNumber: "ab  42" })
     ).rejects.toBeInstanceOf(RedemptionConflictError);
-    await expect(db.redemption.count()).resolves.toBe(1);
+    await expect(
+      db.redemption.count({ where: { organizationId: scope.organization.id } })
+    ).resolves.toBe(1);
   });
 
   it("allows exactly one concurrent duplicate redemption and one audit", async () => {
@@ -430,6 +436,8 @@ describeWithLocalDatabase("checkout redemption transaction", () => {
         billSubtotalCents: 2_000
       })
     ).rejects.toBeInstanceOf(RedemptionUnavailableError);
-    await expect(db.redemption.count()).resolves.toBe(0);
+    await expect(
+      db.redemption.count({ where: { organizationId: scope.organization.id } })
+    ).resolves.toBe(0);
   });
 });

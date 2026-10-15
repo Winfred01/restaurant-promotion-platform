@@ -7,6 +7,10 @@ export type WorkspaceLink = { label: string; href: string };
 export function workspaceLinks(basePath: string, role: MembershipRole): WorkspaceLink[] {
   const links = [{ label: "Overview", href: basePath }];
 
+  if (hasPermission(role, Permission.REDEMPTION_CREATE)) {
+    links.push({ label: "Staff checkout", href: `${basePath}/checkout` });
+  }
+
   if (hasPermission(role, Permission.PROMOTION_MANAGE)) {
     links.push({ label: "Manager area", href: `${basePath}/manager` });
   }

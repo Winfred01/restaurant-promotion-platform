@@ -40,9 +40,12 @@ accounts or bypass authentication. The three email addresses are:
 
 All three use the password supplied at seed time. After sign-in, `/app` lists the branches available
 to the employee and opens an authenticated workspace with role-aware navigation and sign-out.
-`/demo` redirects to `/app`. Staff, Manager, and Owner areas show their current access and clearly
-label business screens that are still planned; they do not process claims or redemptions. Customers
-have no login.
+`/demo` redirects to `/app`. Staff, Manager, and Owner can open the Staff checkout page from a
+branch workspace. It looks up customers, captures an acquisition channel only for new customers,
+compares eligible promotions with an advisory Best Deal, and confirms one redemption against the
+live checkout service. The demo seed currently creates accounts and a branch only; configure active
+acquisition channels and promotions in the tenant before exercising a full checkout. Other business
+screens remain labeled as planned. Customers have no login.
 
 ## Product Vision
 

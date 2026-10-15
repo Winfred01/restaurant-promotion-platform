@@ -6,13 +6,17 @@ import { workspaceLinks } from "./navigation";
 describe("workspace navigation", () => {
   const base = "/app/org-1/branch-1";
 
-  it("limits Staff to the safe overview", () => {
-    expect(workspaceLinks(base, MembershipRole.STAFF)).toEqual([{ label: "Overview", href: base }]);
+  it("limits Staff to safe workflow links", () => {
+    expect(workspaceLinks(base, MembershipRole.STAFF)).toEqual([
+      { label: "Overview", href: base },
+      { label: "Staff checkout", href: `${base}/checkout` }
+    ]);
   });
 
   it("adds only Manager tools for a Manager", () => {
     expect(workspaceLinks(base, MembershipRole.MANAGER).map((link) => link.label)).toEqual([
       "Overview",
+      "Staff checkout",
       "Manager area"
     ]);
   });
@@ -20,6 +24,7 @@ describe("workspace navigation", () => {
   it("shows all areas to an Owner", () => {
     expect(workspaceLinks(base, MembershipRole.OWNER).map((link) => link.label)).toEqual([
       "Overview",
+      "Staff checkout",
       "Manager area",
       "Owner area"
     ]);

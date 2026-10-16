@@ -13,6 +13,7 @@ export function workspaceLinks(basePath: string, role: MembershipRole): Workspac
 
   if (hasPermission(role, Permission.PROMOTION_MANAGE)) {
     links.push({ label: "Manager area", href: `${basePath}/manager` });
+    links.push({ label: "Promotions", href: `${basePath}/manager/promotions` });
   }
 
   if (hasPermission(role, Permission.ORGANIZATION_MANAGE)) {

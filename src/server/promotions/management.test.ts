@@ -3,7 +3,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
 import { createTenantIsolationHarness } from "@/test-support/tenant-isolation";
-import { transitionPromotionStatus } from "./lifecycle";
 import { createPromotionManagementService, PromotionNotEditableError } from "./management";
 
 const describeWithDatabase = process.env.DATABASE_URL ? describe : describe.skip;
@@ -25,6 +24,19 @@ describe("promotion management validation", () => {
         appliesToAllBranches: true
       })
     ).rejects.toMatchObject({ name: "ZodError" });
+
+    await expect(
+      service.create({
+        organizationId: "organization-id",
+        actorUserId: "user-id",
+        name: "Invalid dates",
+        rewardType: PromotionRewardType.FIXED_AMOUNT,
+        discountCents: 500,
+        appliesToAllBranches: true,
+        validFrom: new Date("2026-10-17T00:00:00Z"),
+        validUntil: new Date("2026-10-16T00:00:00Z")
+      })
+    ).rejects.toMatchObject({ name: "PromotionValidationError" });
   });
 });
 
@@ -90,21 +102,27 @@ describeWithLocalDatabase("Manager/Owner promotion management", () => {
       branchRole: MembershipRole.STAFF
     });
 
-    await expect(
-      service.create({
-        organizationId: manager.organization.id,
-        actorUserId: manager.user.id,
-        name: "Manager branch offer",
-        rewardType: PromotionRewardType.SPEND_THRESHOLD,
-        discountCents: 1_000,
-        minimumSpendCents: 5_000,
-        appliesToAllBranches: false,
-        branchIds: [manager.branch.id]
-      })
-    ).resolves.toMatchObject({
+    const managerPromotion = await service.create({
+      organizationId: manager.organization.id,
+      actorUserId: manager.user.id,
+      name: "Manager branch offer",
+      rewardType: PromotionRewardType.SPEND_THRESHOLD,
+      discountCents: 1_000,
+      minimumSpendCents: 5_000,
+      appliesToAllBranches: false,
+      branchIds: [manager.branch.id]
+    });
+    expect(managerPromotion).toMatchObject({
       organizationId: manager.organization.id,
       branches: [{ branchId: manager.branch.id }]
     });
+    await expect(
+      service.activate({
+        organizationId: manager.organization.id,
+        actorUserId: manager.user.id,
+        promotionId: managerPromotion.id
+      })
+    ).resolves.toMatchObject({ status: PromotionStatus.ACTIVE });
 
     await expect(
       service.create({
@@ -217,10 +235,10 @@ describeWithLocalDatabase("Manager/Owner promotion management", () => {
       discountCents: 500,
       appliesToAllBranches: true
     });
-    await transitionPromotionStatus(db, {
+    await service.activate({
       organizationId: scope.organization.id,
-      promotionId: promotion.id,
-      status: PromotionStatus.ACTIVE
+      actorUserId: scope.user.id,
+      promotionId: promotion.id
     });
 
     await expect(
@@ -258,6 +276,7 @@ describeWithLocalDatabase("Manager/Owner promotion management", () => {
     });
     expect(audits.map(({ action }) => action)).toEqual([
       "PROMOTION_CREATED",
+      "PROMOTION_ACTIVATED",
       "PROMOTION_PAUSED",
       "PROMOTION_ARCHIVED"
     ]);

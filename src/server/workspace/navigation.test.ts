@@ -17,7 +17,8 @@ describe("workspace navigation", () => {
     expect(workspaceLinks(base, MembershipRole.MANAGER).map((link) => link.label)).toEqual([
       "Overview",
       "Staff checkout",
-      "Manager area"
+      "Manager area",
+      "Promotions"
     ]);
   });
 
@@ -26,6 +27,7 @@ describe("workspace navigation", () => {
       "Overview",
       "Staff checkout",
       "Manager area",
+      "Promotions",
       "Owner area"
     ]);
   });

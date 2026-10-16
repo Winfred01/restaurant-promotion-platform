@@ -47,6 +47,12 @@ live checkout service. The demo seed currently creates accounts and a branch onl
 acquisition channels and promotions in the tenant before exercising a full checkout. Other business
 screens remain labeled as planned. Customers have no login.
 
+Managers and Owners can open **Promotions** from the branch workspace to create and edit bill-level
+fixed, percentage, or spend-threshold offers, select branches, and activate, pause, or archive them.
+Managers can create and manage offers for their authorized branch; Owners can target all branches.
+Offers start as drafts and must be activated before Staff checkout can use them. The management
+screen shows historical archived offers without deleting them.
+
 ## Product Vision
 
 Most small and mid-sized restaurants can create discounts, but they often cannot answer the more important questions:

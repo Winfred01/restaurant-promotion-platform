@@ -19,6 +19,7 @@ import {
   PromotionUnavailableError,
   requireAvailablePromotionBranches,
   transitionPromotionStatus,
+  validatePromotionInput,
   type PromotionDefinitionInput,
   type PromotionPersistence
 } from "./lifecycle";
@@ -239,6 +240,7 @@ export function createPromotionManagementService(db: PrismaClient) {
     async create(input: CreateManagedPromotionInput) {
       const { organizationId, actorUserId } = actorSchema.parse(input);
       const definition = parseDefinition(input);
+      validatePromotionInput(definition);
       const branchIds = normalizeBranchTargets(definition);
 
       return db.$transaction(async (transaction) => {
@@ -267,6 +269,7 @@ export function createPromotionManagementService(db: PrismaClient) {
     async edit(input: EditManagedPromotionInput) {
       const { organizationId, actorUserId, promotionId } = promotionIdentitySchema.parse(input);
       const definition = parseDefinition(input);
+      validatePromotionInput(definition);
       const branchIds = normalizeBranchTargets(definition);
 
       return db.$transaction(async (transaction) => {
@@ -336,6 +339,10 @@ export function createPromotionManagementService(db: PrismaClient) {
 
     async pause(input: PromotionLifecycleManagementInput) {
       return changeStatus(input, PromotionStatus.PAUSED, "PROMOTION_PAUSED");
+    },
+
+    async activate(input: PromotionLifecycleManagementInput) {
+      return changeStatus(input, PromotionStatus.ACTIVE, "PROMOTION_ACTIVATED");
     },
 
     async archive(input: PromotionLifecycleManagementInput) {

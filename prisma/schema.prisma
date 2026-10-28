@@ -98,6 +98,7 @@ model RestaurantOrganization {
   promotionCodes          PromotionCode[]
   promotionClaims         CustomerPromotionClaim[]
   redemptions             Redemption[]
+  redemptionVoids         RedemptionVoid[]
   auditLogs               AuditLog[]
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
@@ -189,6 +190,7 @@ model OrganizationMembership {
   createdPromotions Promotion[]
   promotionClaims   CustomerPromotionClaim[]
   redemptions       Redemption[]             @relation("RedemptionActor")
+  redemptionVoids   RedemptionVoid[]         @relation("RedemptionVoidActor")
   auditLogs         AuditLog[]               @relation("AuditActor")
   createdAt         DateTime                 @default(now())
   updatedAt         DateTime                 @updatedAt
@@ -330,12 +332,31 @@ model Redemption {
   netBillCents            Int?
   status                  RedemptionStatus        @default(COMPLETED)
   redeemedAt              DateTime                @default(now())
+  voidedAt                DateTime?
+  redemptionVoid          RedemptionVoid?
 
   @@unique([id, organizationId])
   @@index([organizationId, customerId, promotionId, status])
   @@index([organizationId, branchId, status])
   @@index([organizationId, branchId, normalizedReceiptNumber, status])
   @@index([organizationId, claimId])
+}
+
+model RedemptionVoid {
+  id                 String                 @id @default(cuid())
+  organizationId     String
+  organization       RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  redemptionId       String
+  redemption         Redemption             @relation(fields: [redemptionId, organizationId], references: [id, organizationId], onDelete: Restrict, onUpdate: Cascade)
+  voidedByUserId     String
+  voidedByMembership OrganizationMembership @relation("RedemptionVoidActor", fields: [organizationId, voidedByUserId], references: [organizationId, userId], onDelete: Restrict, onUpdate: Cascade)
+  reason             String
+  createdAt          DateTime               @default(now())
+
+  @@unique([id, organizationId])
+  @@unique([redemptionId, organizationId])
+  @@index([organizationId, createdAt])
+  @@index([organizationId, voidedByUserId, createdAt])
 }
 
 model AuditLog {

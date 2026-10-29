@@ -3,6 +3,7 @@ import { z } from "zod";
 
 import { createPrismaAuthorizationGuard } from "@/server/authorization/guard";
 import { Permission } from "@/server/authorization/permissions";
+import { createRetryingTransactionClient } from "@/server/serializable-transaction";
 
 const identifierSchema = z.string().trim().min(1).max(191);
 const voidInputSchema = z
@@ -38,12 +39,14 @@ function isTransactionConflict(error: unknown) {
 }
 
 export function createRedemptionVoidService(db: PrismaClient, options: { now?: () => Date } = {}) {
+  const retryingDb = createRetryingTransactionClient(db);
+
   return {
     async voidRedemption(input: VoidRedemptionInput) {
       const parsedInput = voidInputSchema.parse(input);
 
       try {
-        return await db.$transaction(
+        return await retryingDb.$transaction(
           async (transaction) => {
             const redemption = await transaction.redemption.findUnique({
               where: {

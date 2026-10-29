@@ -1,5 +1,6 @@
 import {
   MembershipRole,
+  Prisma,
   PrismaClient,
   PromotionClaimSource,
   PromotionClaimStatus,
@@ -39,6 +40,30 @@ describe("staff promotion claim validation", () => {
         promotionId: ""
       })
     ).rejects.toMatchObject({ name: "ZodError" });
+  });
+
+  it("maps exhausted serialization retries to a safe conflict", async () => {
+    let transactionCalls = 0;
+    const db = {
+      $transaction: async () => {
+        transactionCalls += 1;
+        throw new Prisma.PrismaClientKnownRequestError("Transaction conflict", {
+          code: "P2034",
+          clientVersion: Prisma.prismaVersion.client
+        });
+      }
+    } as unknown as PrismaClient;
+
+    await expect(
+      createStaffPromotionClaimService(db).create({
+        organizationId: "organization-id",
+        actorUserId: "user-id",
+        branchId: "branch-id",
+        customerId: "customer-id",
+        promotionId: "promotion-id"
+      })
+    ).rejects.toBeInstanceOf(PromotionClaimConflictError);
+    expect(transactionCalls).toBe(3);
   });
 });
 

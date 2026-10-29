@@ -38,9 +38,11 @@ describe("redemption void input", () => {
     ).rejects.toMatchObject({ name: "ZodError" });
   });
 
-  it("maps database uniqueness and serialization failures to a safe conflict", async () => {
+  it("maps exhausted serialization retries to a safe conflict", async () => {
+    let transactionCalls = 0;
     const db = {
       $transaction: async () => {
+        transactionCalls += 1;
         throw new Prisma.PrismaClientKnownRequestError("Transaction conflict", {
           code: "P2034",
           clientVersion: Prisma.prismaVersion.client
@@ -56,6 +58,7 @@ describe("redemption void input", () => {
         reason: "Incorrect receipt"
       })
     ).rejects.toBeInstanceOf(RedemptionVoidConflictError);
+    expect(transactionCalls).toBe(3);
   });
 });
 

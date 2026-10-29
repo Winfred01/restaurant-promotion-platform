@@ -72,6 +72,32 @@ describe("checkout input and receipt normalization", () => {
       })
     ).rejects.toBeInstanceOf(RedemptionConflictError);
   });
+
+  it("maps exhausted serialization retries to a safe conflict", async () => {
+    let transactionCalls = 0;
+    const db = {
+      $transaction: async () => {
+        transactionCalls += 1;
+        throw new Prisma.PrismaClientKnownRequestError("Transaction conflict", {
+          code: "P2034",
+          clientVersion: Prisma.prismaVersion.client
+        });
+      }
+    } as unknown as PrismaClient;
+
+    await expect(
+      createCheckoutRedemptionService(db).create({
+        organizationId: "org",
+        actorUserId: "actor",
+        branchId: "branch",
+        customerId: "customer",
+        promotionId: "promotion",
+        receiptNumber: "A-1",
+        billSubtotalCents: 500
+      })
+    ).rejects.toBeInstanceOf(RedemptionConflictError);
+    expect(transactionCalls).toBe(3);
+  });
 });
 
 describeWithLocalDatabase("checkout redemption transaction", () => {

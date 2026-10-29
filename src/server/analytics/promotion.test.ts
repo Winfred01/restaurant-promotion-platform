@@ -9,7 +9,6 @@ import { afterAll, afterEach, beforeAll, describe, expect, it } from "vitest";
 
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
 import { createPromotion } from "@/server/promotions/lifecycle";
-import { createRedemptionVoidService } from "@/server/redemptions/void";
 import { createTenantIsolationHarness } from "@/test-support/tenant-isolation";
 import {
   createPromotionAnalyticsService,
@@ -98,6 +97,7 @@ describeWithLocalDatabase("promotion analytics report", () => {
     userId: string;
     billSubtotalCents: number;
     discountCents: number;
+    status?: RedemptionStatus;
   }) {
     return db.redemption.create({
       data: {
@@ -108,7 +108,9 @@ describeWithLocalDatabase("promotion analytics report", () => {
         redeemedByUserId: input.userId,
         billSubtotalCents: input.billSubtotalCents,
         discountCents: input.discountCents,
-        netBillCents: input.billSubtotalCents - input.discountCents
+        netBillCents: input.billSubtotalCents - input.discountCents,
+        status: input.status,
+        voidedAt: input.status === RedemptionStatus.VOIDED ? new Date() : undefined
       }
     });
   }
@@ -168,7 +170,7 @@ describeWithLocalDatabase("promotion analytics report", () => {
         status: PromotionClaimStatus.CANCELLED
       })
     ]);
-    const completed = await Promise.all([
+    const [, , voided] = await Promise.all([
       redemption({
         organizationId: scope.organization.id,
         branchId: scope.branch.id,
@@ -194,15 +196,10 @@ describeWithLocalDatabase("promotion analytics report", () => {
         promotionId: measured.id,
         userId: scope.user.id,
         billSubtotalCents: 10_000,
-        discountCents: 1_000
+        discountCents: 1_000,
+        status: RedemptionStatus.VOIDED
       })
     ]);
-    await createRedemptionVoidService(db).voidRedemption({
-      organizationId: scope.organization.id,
-      actorUserId: scope.user.id,
-      redemptionId: completed[2].id,
-      reason: "Analytics void fixture"
-    });
 
     const report = await createPromotionAnalyticsService(db).report({
       organizationId: scope.organization.id,
@@ -243,7 +240,7 @@ describeWithLocalDatabase("promotion analytics report", () => {
     ]);
     expect(JSON.stringify(report).toLowerCase()).not.toContain("incremental revenue");
     await expect(
-      db.redemption.findUniqueOrThrow({ where: { id: completed[2].id } })
+      db.redemption.findUniqueOrThrow({ where: { id: voided.id } })
     ).resolves.toMatchObject({ status: RedemptionStatus.VOIDED });
   });
 

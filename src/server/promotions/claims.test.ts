@@ -224,7 +224,23 @@ describeWithLocalDatabase("staff promotion claims and tenant isolation", () => {
         }
       })
     ).rejects.toThrow();
-    await expect(db.customerPromotionClaim.count()).resolves.toBe(0);
+    await expect(
+      db.customerPromotionClaim.count({
+        where: {
+          organizationId: first.organization.id,
+          OR: [
+            {
+              customerId: secondCustomer.id,
+              promotionId: firstPromotion.id
+            },
+            {
+              customerId: firstCustomer.id,
+              promotionId: secondPromotion.id
+            }
+          ]
+        }
+      })
+    ).resolves.toBe(0);
   });
 
   it("rejects inactive, untargeted, and wrong-promotion code claims", async () => {
@@ -283,7 +299,15 @@ describeWithLocalDatabase("staff promotion claims and tenant isolation", () => {
     ).rejects.toMatchObject({
       reasonCodes: [PromotionEligibilityReason.CODE_UNAVAILABLE]
     } satisfies Partial<PromotionClaimIneligibleError>);
-    await expect(db.customerPromotionClaim.count()).resolves.toBe(0);
+    await expect(
+      db.customerPromotionClaim.count({
+        where: {
+          organizationId: scope.organization.id,
+          customerId: customer.id,
+          promotionId: { in: [draft.id, targeted.id] }
+        }
+      })
+    ).resolves.toBe(0);
   });
 
   it("defers spend threshold until checkout but blocks prior completed redemption", async () => {

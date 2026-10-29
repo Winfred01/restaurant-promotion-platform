@@ -90,6 +90,8 @@ Concurrent duplicate attempts must result in one success and one safe failure.
 
 Compute analytics from source records for v0.1. Do not store derived metrics unless performance later requires it. Promotion analytics exclude VOIDED redemptions and use "promotion-linked sales" terminology. Acquisition analytics use original customer channel and remain separate.
 
+The organization-level Acquisition Channel report groups customers by their original channel, including archived channels and an unattributed group for legacy customers. An observed return requires at least two completed redemptions with recorded bill amounts. Recorded spend sums only the net amounts of those completed promotion-linked bills; VOIDED and legacy amount-less rows are excluded. This is a lower bound on actual visits and lifetime spend because v0.1 does not record unpromoted visits or sales. Customer creation has no first-branch attribution, so the report does not claim branch-level acquisition metrics.
+
 ## Audit Logging
 
 Audit logs are append-only and tenant-scoped. Capture actor, role, action, entity type/id, organization, branch when relevant, reason, before/after data when practical, and timestamp.

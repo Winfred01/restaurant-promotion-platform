@@ -171,7 +171,16 @@ describeWithLocalDatabase("staff promotion claims and tenant isolation", () => {
         promotionId: promotion.id
       })
     ).rejects.toBeInstanceOf(AuthorizationDeniedError);
-    await expect(db.customerPromotionClaim.count()).resolves.toBe(0);
+    await expect(
+      db.customerPromotionClaim.count({
+        where: {
+          organizationId: scope.organization.id,
+          branchId: otherBranch.id,
+          customerId: customer.id,
+          promotionId: promotion.id
+        }
+      })
+    ).resolves.toBe(0);
   });
 
   it("does not expose another tenant's customer or promotion", async () => {

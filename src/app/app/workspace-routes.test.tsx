@@ -6,6 +6,9 @@ const mocks = vi.hoisted(() => ({
   branchPermission: vi.fn(),
   organizationPermission: vi.fn(),
   branchLookup: vi.fn(),
+  currencyLookup: vi.fn(),
+  promotionReport: vi.fn(),
+  acquisitionReport: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`);
   }),
@@ -17,7 +20,18 @@ const mocks = vi.hoisted(() => ({
 vi.mock("next/navigation", () => ({ redirect: mocks.redirect, notFound: mocks.notFound }));
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/server/auth/session", () => ({ getCurrentEmployeeSession: mocks.session }));
-vi.mock("@/server/db", () => ({ prisma: { branch: { findFirst: mocks.branchLookup } } }));
+vi.mock("@/server/db", () => ({
+  prisma: {
+    branch: { findFirst: mocks.branchLookup },
+    restaurantOrganization: { findUnique: mocks.currencyLookup }
+  }
+}));
+vi.mock("@/server/analytics/promotion", () => ({
+  createPromotionAnalyticsService: () => ({ report: mocks.promotionReport })
+}));
+vi.mock("@/server/analytics/acquisition", () => ({
+  createAcquisitionAnalyticsService: () => ({ report: mocks.acquisitionReport })
+}));
 vi.mock("@/server/authorization/guard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/server/authorization/guard")>()),
   createPrismaAuthorizationGuard: () => ({
@@ -41,6 +55,29 @@ describe("protected workspace routes", () => {
     mocks.branchLookup.mockResolvedValue({
       name: "Downtown",
       organization: { name: "Restaurant A" }
+    });
+    mocks.currencyLookup.mockResolvedValue({ currency: "CAD" });
+    mocks.promotionReport.mockResolvedValue({
+      promotions: [
+        {
+          promotionId: "promo-a",
+          promotionName: "Lunch offer",
+          promotionStatus: "ACTIVE",
+          redemptionCount: 2,
+          netBillCents: 4300,
+          totalDiscountCents: 700
+        }
+      ]
+    });
+    mocks.acquisitionReport.mockResolvedValue({
+      channels: [
+        {
+          acquisitionChannelId: "channel-a",
+          acquisitionChannelName: "Referral",
+          newCustomers: 3,
+          observedReturningCustomers: 1
+        }
+      ]
     });
   });
 
@@ -69,8 +106,8 @@ describe("protected workspace routes", () => {
     expect(html).toContain("Downtown");
     expect(html).toContain("Protected");
     expect(html).toContain("Overview");
-    expect(html).not.toContain("Manager area");
-    expect(html).not.toContain("Owner area");
+    expect(html).not.toContain("Branch dashboard");
+    expect(html).not.toContain("Organization dashboard");
     expect(mocks.branchPermission).toHaveBeenCalledWith({
       organizationId: "org-a",
       branchId: "branch-a",
@@ -86,6 +123,8 @@ describe("protected workspace routes", () => {
     await expect(OwnerAreaPage({ params })).rejects.toThrow("REDIRECT:/login");
     expect(mocks.branchPermission).not.toHaveBeenCalled();
     expect(mocks.organizationPermission).not.toHaveBeenCalled();
+    expect(mocks.promotionReport).not.toHaveBeenCalled();
+    expect(mocks.acquisitionReport).not.toHaveBeenCalled();
   });
 
   it("denies a role without Manager permission", async () => {
@@ -96,8 +135,9 @@ describe("protected workspace routes", () => {
       organizationId: "org-a",
       branchId: "branch-a",
       userId: "employee-a",
-      permission: Permission.PROMOTION_MANAGE
+      permission: Permission.BRANCH_ANALYTICS_VIEW
     });
+    expect(mocks.promotionReport).not.toHaveBeenCalled();
   });
 
   it("denies a role without Owner permission", async () => {
@@ -107,15 +147,55 @@ describe("protected workspace routes", () => {
     expect(mocks.organizationPermission).toHaveBeenCalledWith({
       organizationId: "org-a",
       userId: "employee-a",
-      permission: Permission.ORGANIZATION_MANAGE
+      permission: Permission.ORGANIZATION_ANALYTICS_VIEW
+    });
+    expect(mocks.promotionReport).not.toHaveBeenCalled();
+    expect(mocks.acquisitionReport).not.toHaveBeenCalled();
+  });
+
+  it("renders branch-scoped promotion metrics without Owner acquisition data", async () => {
+    mocks.branchPermission.mockResolvedValue({ role: "MANAGER" });
+
+    const html = renderToStaticMarkup(await ManagerAreaPage({ params }));
+    expect(html).toContain("Branch dashboard");
+    expect(html).toContain("Promotion-linked sales");
+    expect(html).toContain("$43.00");
+    expect(html).not.toContain("Referral");
+    expect(mocks.promotionReport).toHaveBeenCalledWith({
+      organizationId: "org-a",
+      branchId: "branch-a",
+      actorUserId: "employee-a"
+    });
+    expect(mocks.acquisitionReport).not.toHaveBeenCalled();
+  });
+
+  it("renders organization metrics and original-channel counts for an Owner", async () => {
+    mocks.organizationPermission.mockResolvedValue({ role: "OWNER" });
+
+    const html = renderToStaticMarkup(await OwnerAreaPage({ params }));
+    expect(html).toContain("Organization dashboard");
+    expect(html).toContain("$43.00");
+    expect(html).toContain("Referral");
+    expect(html).toContain("3 customers");
+    expect(mocks.promotionReport).toHaveBeenCalledWith({
+      organizationId: "org-a",
+      actorUserId: "employee-a"
+    });
+    expect(mocks.acquisitionReport).toHaveBeenCalledWith({
+      organizationId: "org-a",
+      actorUserId: "employee-a"
     });
   });
 
-  it("renders the restricted areas after a successful server-side permission check", async () => {
+  it("shows truthful empty states before demo data exists", async () => {
     mocks.branchPermission.mockResolvedValue({ role: "MANAGER" });
     mocks.organizationPermission.mockResolvedValue({ role: "OWNER" });
+    mocks.promotionReport.mockResolvedValue({ promotions: [] });
+    mocks.acquisitionReport.mockResolvedValue({ channels: [] });
 
-    expect(renderToStaticMarkup(await ManagerAreaPage({ params }))).toContain("Manager tools");
-    expect(renderToStaticMarkup(await OwnerAreaPage({ params }))).toContain("Organization tools");
+    expect(renderToStaticMarkup(await ManagerAreaPage({ params }))).toContain("No promotions yet");
+    expect(renderToStaticMarkup(await OwnerAreaPage({ params }))).toContain(
+      "No customers have been recorded yet"
+    );
   });
 });

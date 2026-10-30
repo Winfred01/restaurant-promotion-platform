@@ -1,6 +1,6 @@
-import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { createPromotionAnalyticsService } from "@/server/analytics/promotion";
 import { getCurrentEmployeeSession } from "@/server/auth/session";
 import {
   AuthorizationDeniedError,
@@ -8,6 +8,8 @@ import {
 } from "@/server/authorization/guard";
 import { Permission } from "@/server/authorization/permissions";
 import { prisma } from "@/server/db";
+
+import { Dashboard } from "../dashboard";
 
 export default async function ManagerAreaPage({
   params
@@ -23,27 +25,30 @@ export default async function ManagerAreaPage({
       organizationId,
       branchId,
       userId: session.user.id,
-      permission: Permission.PROMOTION_MANAGE
+      permission: Permission.BRANCH_ANALYTICS_VIEW
     });
   } catch (error) {
     if (error instanceof AuthorizationDeniedError) notFound();
     throw error;
   }
 
+  const report = await createPromotionAnalyticsService(prisma).report({
+    organizationId,
+    branchId,
+    actorUserId: session.user.id
+  });
+  const organization = await prisma.restaurantOrganization.findUnique({
+    where: { id: organizationId },
+    select: { currency: true }
+  });
+  if (!organization) notFound();
+
   return (
-    <>
-      <p className="text-sm font-semibold uppercase tracking-widest text-teal-700">Manager area</p>
-      <h1 className="mt-3 text-3xl font-semibold">Manager tools</h1>
-      <p className="mt-4 max-w-2xl text-slate-700">
-        This route is restricted to authorized Managers and Owners. Promotion management is
-        available; branch analytics are planned.
-      </p>
-      <Link
-        className="mt-6 inline-block rounded-lg bg-teal-800 px-4 py-2 font-semibold text-white"
-        href={`/app/${organizationId}/${branchId}/manager/promotions`}
-      >
-        Manage promotions
-      </Link>
-    </>
+    <Dashboard
+      scope="branch"
+      report={report}
+      currency={organization.currency}
+      basePath={`/app/${organizationId}/${branchId}`}
+    />
   );
 }

@@ -12,12 +12,12 @@ export function workspaceLinks(basePath: string, role: MembershipRole): Workspac
   }
 
   if (hasPermission(role, Permission.PROMOTION_MANAGE)) {
-    links.push({ label: "Manager area", href: `${basePath}/manager` });
+    links.push({ label: "Branch dashboard", href: `${basePath}/manager` });
     links.push({ label: "Promotions", href: `${basePath}/manager/promotions` });
   }
 
   if (hasPermission(role, Permission.ORGANIZATION_MANAGE)) {
-    links.push({ label: "Owner area", href: `${basePath}/owner` });
+    links.push({ label: "Organization dashboard", href: `${basePath}/owner` });
   }
 
   return links;

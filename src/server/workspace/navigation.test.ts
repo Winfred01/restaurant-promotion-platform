@@ -17,7 +17,7 @@ describe("workspace navigation", () => {
     expect(workspaceLinks(base, MembershipRole.MANAGER).map((link) => link.label)).toEqual([
       "Overview",
       "Staff checkout",
-      "Manager area",
+      "Branch dashboard",
       "Promotions"
     ]);
   });
@@ -26,9 +26,9 @@ describe("workspace navigation", () => {
     expect(workspaceLinks(base, MembershipRole.OWNER).map((link) => link.label)).toEqual([
       "Overview",
       "Staff checkout",
-      "Manager area",
+      "Branch dashboard",
       "Promotions",
-      "Owner area"
+      "Organization dashboard"
     ]);
   });
 });

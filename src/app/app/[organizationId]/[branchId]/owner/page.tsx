@@ -1,5 +1,7 @@
 import { notFound, redirect } from "next/navigation";
 
+import { createAcquisitionAnalyticsService } from "@/server/analytics/acquisition";
+import { createPromotionAnalyticsService } from "@/server/analytics/promotion";
 import { getCurrentEmployeeSession } from "@/server/auth/session";
 import {
   AuthorizationDeniedError,
@@ -7,6 +9,8 @@ import {
 } from "@/server/authorization/guard";
 import { Permission } from "@/server/authorization/permissions";
 import { prisma } from "@/server/db";
+
+import { Dashboard } from "../dashboard";
 
 export default async function OwnerAreaPage({
   params
@@ -16,26 +20,41 @@ export default async function OwnerAreaPage({
   const session = await getCurrentEmployeeSession();
   if (!session) redirect("/login");
 
-  const { organizationId } = await params;
+  const { organizationId, branchId } = await params;
   try {
     await createPrismaAuthorizationGuard(prisma).requireOrganizationPermission({
       organizationId,
       userId: session.user.id,
-      permission: Permission.ORGANIZATION_MANAGE
+      permission: Permission.ORGANIZATION_ANALYTICS_VIEW
     });
   } catch (error) {
     if (error instanceof AuthorizationDeniedError) notFound();
     throw error;
   }
 
+  const [report, acquisition] = await Promise.all([
+    createPromotionAnalyticsService(prisma).report({
+      organizationId,
+      actorUserId: session.user.id
+    }),
+    createAcquisitionAnalyticsService(prisma).report({
+      organizationId,
+      actorUserId: session.user.id
+    })
+  ]);
+  const organization = await prisma.restaurantOrganization.findUnique({
+    where: { id: organizationId },
+    select: { currency: true }
+  });
+  if (!organization) notFound();
+
   return (
-    <>
-      <p className="text-sm font-semibold uppercase tracking-widest text-teal-700">Owner area</p>
-      <h1 className="mt-3 text-3xl font-semibold">Organization tools</h1>
-      <p className="mt-4 max-w-2xl text-slate-700">
-        This route is restricted to an active organization Owner. Organization settings, membership
-        management, and organization analytics screens are planned.
-      </p>
-    </>
+    <Dashboard
+      scope="organization"
+      report={report}
+      acquisition={acquisition}
+      currency={organization.currency}
+      basePath={`/app/${organizationId}/${branchId}`}
+    />
   );
 }

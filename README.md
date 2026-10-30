@@ -53,6 +53,12 @@ Managers can create and manage offers for their authorized branch; Owners can ta
 Offers start as drafts and must be activated before Staff checkout can use them. The management
 screen shows historical archived offers without deleting them.
 
+The **Branch dashboard** shows Managers and Owners promotion activity for the selected branch.
+The **Organization dashboard** shows Owners restaurant-wide promotion activity and original-channel
+customer acquisition. Both use live tenant-scoped reports, exclude voided redemptions from sales,
+and show empty states until demo data is available. Acquisition figures are organization-wide
+because customers do not have a first-branch attribution.
+
 ## Product Vision
 
 Most small and mid-sized restaurants can create discounts, but they often cannot answer the more important questions:

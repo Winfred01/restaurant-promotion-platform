@@ -16,6 +16,10 @@ export function workspaceLinks(basePath: string, role: MembershipRole): Workspac
     links.push({ label: "Promotions", href: `${basePath}/manager/promotions` });
   }
 
+  if (hasPermission(role, Permission.REDEMPTION_VOID)) {
+    links.push({ label: "Redemption history", href: `${basePath}/manager/redemptions` });
+  }
+
   if (hasPermission(role, Permission.ORGANIZATION_MANAGE)) {
     links.push({ label: "Organization dashboard", href: `${basePath}/owner` });
   }

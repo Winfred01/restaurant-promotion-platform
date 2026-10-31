@@ -59,6 +59,11 @@ customer acquisition. Both use live tenant-scoped reports, exclude voided redemp
 and show empty states until demo data is available. Acquisition figures are organization-wide
 because customers do not have a first-branch attribution.
 
+Managers and Owners can open **Redemption history** for the selected branch to review the 100 most
+recent matching completed or voided records. Customer phone numbers are masked. A completed
+redemption can be voided with a reason and explicit confirmation; the original record, void reason,
+actor, and audit history remain available. Staff cannot open this screen or void redemptions.
+
 ## Product Vision
 
 Most small and mid-sized restaurants can create discounts, but they often cannot answer the more important questions:

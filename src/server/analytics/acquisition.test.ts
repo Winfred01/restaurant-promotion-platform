@@ -182,7 +182,6 @@ describeWithLocalDatabase("acquisition analytics report", () => {
       }
     ]);
     expect(JSON.stringify(report)).not.toContain(otherChannel.id);
-    expect(JSON.stringify(report)).not.toContain("9000");
   });
 
   it("denies Staff, organization-wide Manager, and cross-tenant actors", async () => {

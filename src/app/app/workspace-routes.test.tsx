@@ -17,7 +17,11 @@ const mocks = vi.hoisted(() => ({
   })
 }));
 
-vi.mock("next/navigation", () => ({ redirect: mocks.redirect, notFound: mocks.notFound }));
+vi.mock("next/navigation", () => ({
+  redirect: mocks.redirect,
+  notFound: mocks.notFound,
+  usePathname: () => "/app/org-a/branch-a/manager"
+}));
 vi.mock("@/auth", () => ({ signOut: vi.fn() }));
 vi.mock("@/server/auth/session", () => ({ getCurrentEmployeeSession: mocks.session }));
 vi.mock("@/server/db", () => ({
@@ -63,6 +67,12 @@ describe("protected workspace routes", () => {
           promotionId: "promo-a",
           promotionName: "Lunch offer",
           promotionStatus: "ACTIVE",
+          claimCount: 4,
+          redemptionRateBasisPoints: 5000,
+          grossBillCents: 5000,
+          redemptionsWithBillAmounts: 2,
+          averageBillCents: 2500,
+          uniqueCustomers: 2,
           redemptionCount: 2,
           netBillCents: 4300,
           totalDiscountCents: 700
@@ -74,8 +84,12 @@ describe("protected workspace routes", () => {
         {
           acquisitionChannelId: "channel-a",
           acquisitionChannelName: "Referral",
+          acquisitionChannelStatus: "ACTIVE",
           newCustomers: 3,
-          observedReturningCustomers: 1
+          observedReturningCustomers: 1,
+          observedReturnRateBasisPoints: 3333,
+          recordedSpendCents: 6900,
+          averageRecordedSpendPerCustomerCents: 2300
         }
       ]
     });
@@ -176,7 +190,12 @@ describe("protected workspace routes", () => {
     expect(html).toContain("Organization dashboard");
     expect(html).toContain("$43.00");
     expect(html).toContain("Referral");
-    expect(html).toContain("3 customers");
+    expect(html).toContain("Original channel results");
+    expect(html).toContain("33.33%");
+    expect(html).toContain("$69.00");
+    expect(html).toContain("$23.00");
+    expect(html).toContain("Promotion results");
+    expect(html).toContain("50.00%");
     expect(mocks.promotionReport).toHaveBeenCalledWith({
       organizationId: "org-a",
       actorUserId: "employee-a"

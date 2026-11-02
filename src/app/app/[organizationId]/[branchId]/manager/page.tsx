@@ -9,7 +9,8 @@ import {
 import { Permission } from "@/server/authorization/permissions";
 import { prisma } from "@/server/db";
 
-import { Dashboard } from "../dashboard";
+import { BranchAnalytics } from "./branch-analytics";
+import "./branch-analytics.css";
 
 export default async function ManagerAreaPage({
   params
@@ -44,8 +45,7 @@ export default async function ManagerAreaPage({
   if (!organization) notFound();
 
   return (
-    <Dashboard
-      scope="branch"
+    <BranchAnalytics
       report={report}
       currency={organization.currency}
       basePath={`/app/${organizationId}/${branchId}`}

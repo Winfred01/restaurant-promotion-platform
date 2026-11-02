@@ -10,7 +10,7 @@ The app has an employee login at `/login`. To create a separate, disposable demo
 Owner, Manager, and Staff accounts, first provision a PostgreSQL database whose name includes
 `demo`. Apply migrations, then run the seed once. The seed refuses production mode, requires an
 explicit database-name confirmation, and stops without changes if its organization or account
-emails already exist. It creates no real customer data and never writes the password to the repo.
+emails already exist. It creates only fictional customer data and never writes the password to the repo.
 
 In PowerShell, set runtime values for your dedicated demo database:
 
@@ -36,16 +36,44 @@ accounts or bypass authentication. The three email addresses are:
 | --- | --- | --- |
 | Owner | `owner@restaurant-demo.example.com` | Restaurant-wide Owner membership |
 | Manager | `manager@restaurant-demo.example.com` | Manager membership at Downtown Demo branch |
-| Staff | `staff@restaurant-demo.example.com` | Staff membership at Downtown Demo branch |
+| Staff | `staff@restaurant-demo.example.com` | Staff membership at Downtown Demo and Riverside Demo branches |
 
 All three use the password supplied at seed time. After sign-in, `/app` lists the branches available
 to the employee and opens an authenticated workspace with role-aware navigation and sign-out.
 `/demo` redirects to `/app`. Staff, Manager, and Owner can open the Staff checkout page from a
 branch workspace. It looks up customers, captures an acquisition channel only for new customers,
 compares eligible promotions with an advisory Best Deal, and confirms one redemption against the
-live checkout service. The demo seed currently creates accounts and a branch only; configure active
-acquisition channels and promotions in the tenant before exercising a full checkout. Other business
-screens remain labeled as planned. Customers have no login.
+live checkout service. Customers have no login.
+
+The seed runs in one transaction and creates two branches, three original acquisition channels,
+four customers using fictional reserved `416-555-01xx` numbers, five promotions (active, paused,
+scheduled, and ended), five claims, three completed redemptions, one voided redemption with its
+reason, plus audit records for the seed, redemptions, and void. The Downtown-only percentage offer
+demonstrates branch targeting.
+Historical amounts are synthetic CAD cents and are labeled **promotion-linked sales**, not
+incremental revenue. VOIDED history remains visible but is excluded from sales and recorded-spend
+totals. The returning referral customer has two completed bills; a social-media customer has an
+active claim ready for checkout. Seeded customer numbers are demonstration fixtures, never real PII.
+
+Recommended visitor walkthrough: sign in as Owner to inspect both branches and organization-wide
+original-channel analytics; sign in as Manager to inspect Downtown promotions, branch analytics,
+and the voided history; sign in as Staff to look up `(416) 555-0103`, complete its active claim on
+a new receipt, then create a new fictional customer to see one-time channel capture. Use distinct
+browser profiles when comparing roles. The Manager and Staff accounts cannot access Owner-only
+organization analytics. The seed is a setup command, not a public web endpoint.
+
+For a controlled reset, the operator must record the database identifier, time, and reason in the
+deployment change log, stop the demo app, destroy and recreate **only** the dedicated demo database
+through the database provider's authenticated console, rerun migrations, and rerun `seed:demo` with
+fresh runtime confirmation and password. Never point the reset at a production database. The seed
+refuses to overwrite an existing demo organization, and its `DEMO_SEED_CREATED` audit row records
+the dataset counts. Database destruction removes in-database audit history, so retain the external
+operator log and provider audit trail. There is no HTTP seed or reset route.
+
+### Public Demo URL
+
+Not deployed yet. The operator should add the verified public URL here after Issue #25 deployment
+and smoke verification. Until then, use the local `/login` route with the isolated demo database.
 
 Managers and Owners can open **Promotions** from the branch workspace to create and edit bill-level
 fixed, percentage, or spend-threshold offers, select branches, and activate, pause, or archive them.
@@ -56,7 +84,7 @@ screen shows historical archived offers without deleting them.
 The **Branch dashboard** shows Managers and Owners promotion activity for the selected branch.
 The **Organization dashboard** shows Owners restaurant-wide promotion activity and original-channel
 customer acquisition. Both use live tenant-scoped reports, exclude voided redemptions from sales,
-and show empty states until demo data is available. Acquisition figures are organization-wide
+and show empty states when no matching data exists. Acquisition figures are organization-wide
 because customers do not have a first-branch attribution.
 
 Managers and Owners can open **Redemption history** for the selected branch to review the 100 most

@@ -18,36 +18,32 @@ const environment = {
 };
 
 function createSeedDatabase(existingOrganization = false) {
+  let nextId = 0;
+  const create = () =>
+    vi.fn(async ({ data }: { data: Record<string, unknown> }) => ({
+      id: `demo_${++nextId}`,
+      ...data
+    }));
   const transaction = {
     restaurantOrganization: {
       findUnique: vi.fn(async () => (existingOrganization ? { id: "existing_org" } : null)),
-      create: vi.fn(async () => ({ id: "demo_org" }))
+      create: create()
     },
-    branch: { create: vi.fn(async () => ({ id: "demo_branch" })) },
+    branch: { create: create() },
     user: {
       findMany: vi.fn(async () => []),
-      create: vi.fn(async ({ data }: { data: { email: string; passwordHash: string } }) => ({
-        id: data.email
-      }))
+      create: create()
     },
-    organizationMembership: {
-      create: vi.fn(
-        async ({
-          data
-        }: {
-          data: { organizationId: string; userId: string; role: MembershipRole };
-        }) => ({ data })
-      )
-    },
-    branchMembership: {
-      create: vi.fn(
-        async ({
-          data
-        }: {
-          data: { organizationId: string; userId: string; role: MembershipRole };
-        }) => ({ data })
-      )
-    }
+    organizationMembership: { create: create() },
+    branchMembership: { create: create() },
+    acquisitionChannel: { create: create() },
+    customer: { create: create() },
+    promotion: { create: create() },
+    promotionBranch: { create: create() },
+    customerPromotionClaim: { create: create() },
+    redemption: { create: create() },
+    redemptionVoid: { create: create() },
+    auditLog: { create: create() }
   };
   const db = {
     $transaction: async (operation: (tx: typeof transaction) => Promise<void>) =>
@@ -84,15 +80,31 @@ describe("demo seed", () => {
     ]);
     expect(transaction.user.create).toHaveBeenCalledTimes(3);
     expect(transaction.organizationMembership.create).toHaveBeenCalledTimes(3);
-    expect(transaction.branchMembership.create).toHaveBeenCalledTimes(2);
+    expect(transaction.branch.create).toHaveBeenCalledTimes(2);
+    expect(transaction.branchMembership.create).toHaveBeenCalledTimes(3);
+    expect(transaction.acquisitionChannel.create).toHaveBeenCalledTimes(3);
+    expect(transaction.customer.create).toHaveBeenCalledTimes(4);
+    expect(transaction.promotion.create).toHaveBeenCalledTimes(5);
+    expect(transaction.customerPromotionClaim.create).toHaveBeenCalledTimes(5);
+    expect(transaction.redemption.create).toHaveBeenCalledTimes(4);
+    expect(transaction.redemptionVoid.create).toHaveBeenCalledTimes(1);
+    expect(transaction.auditLog.create).toHaveBeenCalledTimes(6);
     expect(
       transaction.organizationMembership.create.mock.calls.map(([input]) => input.data.role)
     ).toEqual([MembershipRole.OWNER, MembershipRole.MANAGER, MembershipRole.STAFF]);
 
     for (const [input] of transaction.user.create.mock.calls) {
       expect(input.data.passwordHash).not.toBe(password);
-      await expect(verifyPassword(input.data.passwordHash, password)).resolves.toBe(true);
+      await expect(verifyPassword(input.data.passwordHash as string, password)).resolves.toBe(true);
     }
+    expect(
+      transaction.redemption.create.mock.calls.filter(
+        ([input]) => input.data.status === "COMPLETED"
+      )
+    ).toHaveLength(3);
+    expect(
+      transaction.redemption.create.mock.calls.filter(([input]) => input.data.status === "VOIDED")
+    ).toHaveLength(1);
   });
 
   it("does not change an existing demo organization", async () => {

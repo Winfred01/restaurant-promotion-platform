@@ -1,10 +1,18 @@
 import { pathToFileURL } from "node:url";
 
 import { hash } from "@node-rs/argon2";
-import { MembershipRole, PrismaClient } from "@prisma/client";
+import {
+  MembershipRole,
+  PrismaClient,
+  PromotionClaimStatus,
+  PromotionRewardType,
+  PromotionStatus,
+  RedemptionStatus
+} from "@prisma/client";
 
 export const demoOrganizationSlug = "restaurant-demo";
 export const demoBranchName = "Downtown Demo";
+export const demoSecondBranchName = "Riverside Demo";
 
 class DemoSeedError extends Error {}
 
@@ -93,6 +101,11 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
     const branch = await tx.branch.create({
       data: { organizationId: organization.id, name: demoBranchName }
     });
+    const secondBranch = await tx.branch.create({
+      data: { organizationId: organization.id, name: demoSecondBranchName }
+    });
+    let ownerUserId = "";
+    let staffUserId = "";
 
     for (const account of demoAccounts) {
       const user = await tx.user.create({
@@ -102,6 +115,8 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
           passwordHash
         }
       });
+      if (account.role === MembershipRole.OWNER) ownerUserId = user.id;
+      if (account.role === MembershipRole.STAFF) staffUserId = user.id;
 
       await tx.organizationMembership.create({
         data: {
@@ -120,8 +135,246 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
             role: account.role
           }
         });
+        if (account.role === MembershipRole.STAFF) {
+          await tx.branchMembership.create({
+            data: {
+              organizationId: organization.id,
+              branchId: secondBranch.id,
+              userId: user.id,
+              role: account.role
+            }
+          });
+        }
       }
     }
+
+    const channels = await Promise.all(
+      ["Walk-in", "Friend referral", "Social media"].map((name, sortOrder) =>
+        tx.acquisitionChannel.create({ data: { organizationId: organization.id, name, sortOrder } })
+      )
+    );
+    const customerSpecs = [
+      { suffix: "0101", channelId: channels[0].id },
+      { suffix: "0102", channelId: channels[1].id },
+      { suffix: "0103", channelId: channels[2].id },
+      { suffix: "0104", channelId: channels[0].id }
+    ];
+    const customers = [];
+    for (const spec of customerSpecs) {
+      customers.push(
+        await tx.customer.create({
+          data: {
+            organizationId: organization.id,
+            acquisitionChannelId: spec.channelId,
+            phoneNumberRaw: `416555${spec.suffix}`,
+            phoneNumberNormalized: `+1416555${spec.suffix}`,
+            phoneNumberDisplay: `(416) 555-${spec.suffix}`
+          }
+        })
+      );
+    }
+
+    const daysFromNow = (days: number) => new Date(Date.now() + days * 86_400_000);
+    const promotionBase = {
+      organizationId: organization.id,
+      createdByUserId: ownerUserId,
+      validFrom: daysFromNow(-60),
+      validUntil: daysFromNow(30)
+    };
+    const welcome = await tx.promotion.create({
+      data: {
+        ...promotionBase,
+        name: "Welcome $5 off",
+        description: "Demo bill-level fixed discount",
+        status: PromotionStatus.ACTIVE,
+        rewardType: PromotionRewardType.FIXED_AMOUNT,
+        discountCents: 500
+      }
+    });
+    const weeknight = await tx.promotion.create({
+      data: {
+        ...promotionBase,
+        name: "Downtown weeknight 10%",
+        status: PromotionStatus.ACTIVE,
+        rewardType: PromotionRewardType.PERCENTAGE,
+        discountPercent: 10,
+        appliesToAllBranches: false
+      }
+    });
+    await tx.promotionBranch.create({
+      data: { organizationId: organization.id, promotionId: weeknight.id, branchId: branch.id }
+    });
+    await tx.promotion.create({
+      data: {
+        ...promotionBase,
+        name: "Paused $3 off",
+        status: PromotionStatus.PAUSED,
+        rewardType: PromotionRewardType.FIXED_AMOUNT,
+        discountCents: 300
+      }
+    });
+    await tx.promotion.create({
+      data: {
+        ...promotionBase,
+        name: "Upcoming spend $50 save $8",
+        status: PromotionStatus.SCHEDULED,
+        validFrom: daysFromNow(10),
+        validUntil: daysFromNow(40),
+        rewardType: PromotionRewardType.SPEND_THRESHOLD,
+        minimumSpendCents: 5000,
+        discountCents: 800
+      }
+    });
+    await tx.promotion.create({
+      data: {
+        ...promotionBase,
+        name: "Past $2 off",
+        status: PromotionStatus.ENDED,
+        validUntil: daysFromNow(-1),
+        rewardType: PromotionRewardType.FIXED_AMOUNT,
+        discountCents: 200
+      }
+    });
+
+    const redemptions = [
+      {
+        customer: customers[1],
+        promotion: welcome,
+        branchId: branch.id,
+        receipt: "DEMO-1001",
+        subtotal: 3000,
+        discount: 500,
+        days: -12
+      },
+      {
+        customer: customers[1],
+        promotion: weeknight,
+        branchId: branch.id,
+        receipt: "DEMO-1002",
+        subtotal: 4000,
+        discount: 400,
+        days: -4
+      },
+      {
+        customer: customers[0],
+        promotion: welcome,
+        branchId: secondBranch.id,
+        receipt: "DEMO-2001",
+        subtotal: 2500,
+        discount: 500,
+        days: -8
+      },
+      {
+        customer: customers[3],
+        promotion: welcome,
+        branchId: branch.id,
+        receipt: "DEMO-VOID-01",
+        subtotal: 2000,
+        discount: 500,
+        days: -6,
+        voided: true
+      }
+    ];
+    for (const item of redemptions) {
+      const claim = await tx.customerPromotionClaim.create({
+        data: {
+          organizationId: organization.id,
+          branchId: item.branchId,
+          customerId: item.customer.id,
+          promotionId: item.promotion.id,
+          claimedByUserId: staffUserId,
+          status: PromotionClaimStatus.REDEEMED,
+          claimedAt: daysFromNow(item.days)
+        }
+      });
+      const redemption = await tx.redemption.create({
+        data: {
+          organizationId: organization.id,
+          branchId: item.branchId,
+          customerId: item.customer.id,
+          promotionId: item.promotion.id,
+          claimId: claim.id,
+          redeemedByUserId: staffUserId,
+          receiptNumber: item.receipt,
+          normalizedReceiptNumber: item.receipt,
+          billSubtotalCents: item.subtotal,
+          discountCents: item.discount,
+          netBillCents: item.subtotal - item.discount,
+          status: item.voided ? RedemptionStatus.VOIDED : RedemptionStatus.COMPLETED,
+          redeemedAt: daysFromNow(item.days),
+          voidedAt: item.voided ? daysFromNow(item.days + 1) : null
+        }
+      });
+      await tx.auditLog.create({
+        data: {
+          organizationId: organization.id,
+          branchId: item.branchId,
+          actorUserId: staffUserId,
+          actorRole: MembershipRole.STAFF,
+          action: "DEMO_REDEMPTION_CREATED",
+          entityType: "Redemption",
+          entityId: redemption.id,
+          afterJson: { status: RedemptionStatus.COMPLETED, receiptNumber: item.receipt },
+          createdAt: daysFromNow(item.days)
+        }
+      });
+      if (item.voided) {
+        await tx.redemptionVoid.create({
+          data: {
+            organizationId: organization.id,
+            redemptionId: redemption.id,
+            voidedByUserId: ownerUserId,
+            reason: "Fictional demo correction",
+            createdAt: daysFromNow(item.days + 1)
+          }
+        });
+        await tx.auditLog.create({
+          data: {
+            organizationId: organization.id,
+            branchId: item.branchId,
+            actorUserId: ownerUserId,
+            actorRole: MembershipRole.OWNER,
+            action: "DEMO_REDEMPTION_VOIDED",
+            entityType: "Redemption",
+            entityId: redemption.id,
+            reason: "Fictional demo correction",
+            beforeJson: { status: RedemptionStatus.COMPLETED },
+            afterJson: { status: RedemptionStatus.VOIDED },
+            createdAt: daysFromNow(item.days + 1)
+          }
+        });
+      }
+    }
+    await tx.customerPromotionClaim.create({
+      data: {
+        organizationId: organization.id,
+        branchId: branch.id,
+        customerId: customers[2].id,
+        promotionId: welcome.id,
+        claimedByUserId: staffUserId,
+        status: PromotionClaimStatus.CLAIMED
+      }
+    });
+    await tx.auditLog.create({
+      data: {
+        organizationId: organization.id,
+        actorUserId: ownerUserId,
+        actorRole: MembershipRole.OWNER,
+        action: "DEMO_SEED_CREATED",
+        entityType: "RestaurantOrganization",
+        entityId: organization.id,
+        afterJson: {
+          branches: 2,
+          users: 3,
+          channels: 3,
+          customers: 4,
+          promotions: 5,
+          claims: 5,
+          completedRedemptions: 3,
+          voidedRedemptions: 1
+        }
+      }
+    });
   });
 }
 
@@ -131,7 +384,9 @@ async function main() {
 
   try {
     await seedDemoDatabase(db, password);
-    process.stdout.write("Demo organization and three employee accounts created.\n");
+    process.stdout.write(
+      "Demo organization, two branches, three employee accounts, and fictional scenario created.\n"
+    );
   } finally {
     await db.$disconnect();
   }

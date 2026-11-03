@@ -3,7 +3,8 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   title: "Restaurant Promotion Platform",
-  description: "Production-oriented MVP scaffold for restaurant promotion operations."
+  description:
+    "A restaurant promotion platform for staff checkout, customer acquisition capture, and promotion-linked reporting."
 };
 
 export default function RootLayout({

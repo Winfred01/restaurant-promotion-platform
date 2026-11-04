@@ -19,6 +19,7 @@ describe("workspace navigation", () => {
       "Staff checkout",
       "Branch dashboard",
       "Promotions",
+      "Branches",
       "Redemption history"
     ]);
   });
@@ -29,6 +30,7 @@ describe("workspace navigation", () => {
       "Staff checkout",
       "Branch dashboard",
       "Promotions",
+      "Branches",
       "Redemption history",
       "Organization dashboard"
     ]);

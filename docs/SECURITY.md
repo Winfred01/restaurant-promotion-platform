@@ -72,3 +72,7 @@ Back up PostgreSQL regularly, test restore procedures, protect backups with encr
 ## Future Security Work
 
 RLS evaluation, dependency scanning, IDOR-focused review, public endpoint abuse testing, privacy/data retention policy, data export/deletion process, and tamper-evident audit enhancements.
+
+## Dependency advisory status (2026-11-05)
+
+Issue #62 updates Next.js to `16.4.5`, Zod to `4.6.7`, and Vitest to `5.1.0` (with Vite `8.3.6`). The current `npm audit --omit=dev` reports zero vulnerabilities. The full audit still reports seven moderate findings, all through the development-only `typescript-eslint` dependency chain and `minimatch@10.2.6` (`GHSA-g3hv-75wg-m249`). The advisory requires an attacker-controlled glob pattern with `optimizationLevel >= 2`; this project does not expose lint configuration to web users. Keep this residual finding visible in full audits and update the lint dependency chain when a compatible patched release is available. Do not treat the development-only finding as a production dependency or suppress it from audit output.

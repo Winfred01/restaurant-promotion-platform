@@ -16,6 +16,7 @@ export type EmployeeSessionUser = {
   id: string;
   email: string;
   name: string;
+  demoLeaseId?: string;
 };
 
 export type EmployeeAuthUserRecord = EmployeeSessionUser & {

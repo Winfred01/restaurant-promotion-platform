@@ -1,4 +1,5 @@
 import type { EmployeeSessionUser } from "@/server/auth/credentials";
+import { isGuidedDemoEnabled } from "@/server/demo/entry";
 
 export type EmployeeSession = {
   user: EmployeeSessionUser;
@@ -21,11 +22,20 @@ export async function getCurrentEmployeeSession(): Promise<EmployeeSession | nul
     return null;
   }
 
+  if (
+    session.user.demoLeaseId &&
+    (!isGuidedDemoEnabled() ||
+      !session.user.demoExpiresAt ||
+      session.user.demoExpiresAt <= Date.now())
+  )
+    return null;
+
   return {
     user: {
       id: session.user.id,
       email: session.user.email,
-      name: session.user.name
+      name: session.user.name,
+      demoLeaseId: session.user.demoLeaseId
     }
   };
 }

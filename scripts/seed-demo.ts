@@ -72,7 +72,19 @@ export function validateDemoSeedEnvironment(env: DemoSeedEnvironment) {
   return env.DEMO_SEED_PASSWORD;
 }
 
-export async function seedDemoDatabase(db: PrismaClient, password: string) {
+export async function seedDemoDatabase(db: PrismaClient, password: string, tenantTag?: string) {
+  if (tenantTag !== undefined && !/^[a-f0-9]{16}$/.test(tenantTag)) {
+    throw new DemoSeedError("Invalid isolated demo tenant tag.");
+  }
+  const organizationSlug =
+    tenantTag !== undefined ? `${demoOrganizationSlug}-${tenantTag}` : demoOrganizationSlug;
+  const accounts =
+    tenantTag !== undefined
+      ? demoAccounts.map((account) => ({
+          ...account,
+          email: `${account.role.toLowerCase()}+${tenantTag}@restaurant-demo.example.com`
+        }))
+      : demoAccounts;
   const passwordHash = await hash(password, {
     memoryCost: 19456,
     timeCost: 2,
@@ -80,11 +92,11 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
     parallelism: 1
   });
 
-  await db.$transaction(async (tx) => {
+  return db.$transaction(async (tx) => {
     const [existingOrganization, existingUsers] = await Promise.all([
-      tx.restaurantOrganization.findUnique({ where: { slug: demoOrganizationSlug } }),
+      tx.restaurantOrganization.findUnique({ where: { slug: organizationSlug } }),
       tx.user.findMany({
-        where: { email: { in: demoAccounts.map((account) => account.email) } },
+        where: { email: { in: accounts.map((account) => account.email) } },
         select: { id: true }
       })
     ]);
@@ -96,7 +108,7 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
     }
 
     const organization = await tx.restaurantOrganization.create({
-      data: { name: "Restaurant Demo", slug: demoOrganizationSlug }
+      data: { name: "Restaurant Demo", slug: organizationSlug }
     });
     const branch = await tx.branch.create({
       data: { organizationId: organization.id, name: demoBranchName }
@@ -107,7 +119,7 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
     let ownerUserId = "";
     let staffUserId = "";
 
-    for (const account of demoAccounts) {
+    for (const account of accounts) {
       const user = await tx.user.create({
         data: {
           email: account.email,
@@ -146,6 +158,9 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
           });
         }
       }
+    }
+    if (tenantTag !== undefined) {
+      await tx.demoTenantLease.create({ data: { organizationId: organization.id } });
     }
 
     const channels = await Promise.all(
@@ -375,6 +390,7 @@ export async function seedDemoDatabase(db: PrismaClient, password: string) {
         }
       }
     });
+    return organization.id;
   });
 }
 

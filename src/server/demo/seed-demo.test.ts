@@ -114,4 +114,11 @@ describe("demo seed", () => {
     expect(transaction.restaurantOrganization.create).not.toHaveBeenCalled();
     expect(transaction.user.create).not.toHaveBeenCalled();
   });
+
+  it("rejects an invalid isolated tenant tag before a database transaction", async () => {
+    const { db } = createSeedDatabase();
+    await expect(seedDemoDatabase(db, password, "")).rejects.toThrow(
+      "Invalid isolated demo tenant tag"
+    );
+  });
 });

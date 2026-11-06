@@ -36,6 +36,11 @@ enum MembershipStatus {
   DISABLED
 }
 
+enum DemoTenantLeaseStatus {
+  AVAILABLE
+  CLAIMED
+}
+
 enum AcquisitionChannelStatus {
   ACTIVE
   ARCHIVED
@@ -100,10 +105,26 @@ model RestaurantOrganization {
   redemptions             Redemption[]
   redemptionVoids         RedemptionVoid[]
   auditLogs               AuditLog[]
+  demoTenantLease         DemoTenantLease?
   createdAt               DateTime                     @default(now())
   updatedAt               DateTime                     @updatedAt
 
   @@index([status])
+}
+
+model DemoTenantLease {
+  id              String                @id @default(cuid())
+  organizationId  String                @unique
+  organization    RestaurantOrganization @relation(fields: [organizationId], references: [id], onDelete: Restrict, onUpdate: Cascade)
+  status          DemoTenantLeaseStatus @default(AVAILABLE)
+  selectedRole    MembershipRole?
+  selectedUserId  String?
+  ticketHash      String?               @unique
+  ticketExpiresAt DateTime?
+  claimedAt       DateTime?
+  createdAt       DateTime              @default(now())
+
+  @@index([status, createdAt])
 }
 
 model AcquisitionChannel {

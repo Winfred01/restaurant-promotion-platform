@@ -136,6 +136,24 @@ recent matching completed or voided records. Customer phone numbers are masked. 
 redemption can be voided with a reason and explicit confirmation; the original record, void reason,
 actor, and audit history remain available. Staff cannot open this screen or void redemptions.
 
+### Public QR claim
+
+An authenticated Manager or Owner can open the public claim page for an active promotion from
+**Promotions** and use that URL as the destination of a restaurant-controlled QR code. The URL is
+branch-specific. Customers enter a phone number without creating an account. For an existing
+customer, a valid request creates a `QR` claim; new customers ask staff to create their record and
+capture their original Acquisition Channel first. Checkout still rechecks eligibility, bill amount,
+one-use-per-promotion, and receipt uniqueness. The public page always gives the same receipt message
+for valid requests, including unknown customers, ineligible offers, duplicates, and rate limits.
+
+The endpoint requires a strong `AUTH_SECRET` to HMAC phone and network rate-limit keys; it never
+stores raw phone numbers or IP addresses in rate-limit rows. It limits requests per IP, branch,
+promotion, and phone hash across app instances using PostgreSQL. On Vercel it reads the platform's
+forwarded client address; other hosts use a conservative shared `unknown` address until a trusted
+proxy header is configured. Run `npm.cmd run prune:public-claim-rate-limits` daily from an operator
+job to remove counters that expired more than 24 hours ago. The command does not remove claims or
+audit history.
+
 ## Product Vision
 
 Most small and mid-sized restaurants can create discounts, but they often cannot answer the more important questions:

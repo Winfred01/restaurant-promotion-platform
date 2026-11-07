@@ -1,4 +1,5 @@
 import { MembershipRole, PromotionStatus } from "@prisma/client";
+import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
 import { getCurrentEmployeeSession } from "@/server/auth/session";
@@ -126,6 +127,17 @@ export default async function PromotionManagementPage({ params }: { params: Para
                     ? "All branches"
                     : `Selected branches: ${branchIds.length}`}
                 </p>
+                {promotion.status === PromotionStatus.ACTIVE &&
+                  (promotion.appliesToAllBranches || branchIds.includes(branchId)) && (
+                    <p className="mt-3 text-sm">
+                      <Link
+                        href={`/claim/${organizationId}/${branchId}/${promotion.id}`}
+                        className="font-semibold text-teal-800 underline underline-offset-4"
+                      >
+                        Open public claim page for this branch
+                      </Link>
+                    </p>
+                  )}
                 {!canManage ? (
                   <p className="mt-4 text-sm text-slate-600">
                     This offer is visible at this branch. An Owner can manage its organization-wide

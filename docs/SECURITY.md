@@ -33,6 +33,15 @@ Use Auth.js with email/password credentials for employees in v0.1. Do not add OA
 
 Rate-limit by IP, promotion, branch, and phone hash. Do not reveal whether a phone exists. Do not expose customer profiles or staff-only promotion data.
 
+The public claim route accepts same-origin, size-limited JSON and returns one 202 message for every
+well-formed phone/context request, including unknown customers, duplicate or ineligible claims,
+and exhausted limits. PostgreSQL counters enforce per-minute IP/branch/promotion and hourly phone
+limits across instances. Counter keys use HMAC-SHA-256 with `AUTH_SECRET`, not raw IPs or phones.
+Only the trusted Vercel forwarded-address header is read; absent it, all visitors share a strict
+`unknown` address bucket. An anonymous claim and audit row have null actor fields and `QR` source;
+database checks prevent Staff claims without an employee actor and anonymous non-QR audit rows.
+Run the operator-only counter-prune command daily. Never expose it as an HTTP route.
+
 ## Phone Enumeration
 
 Authenticated staff lookup may reveal customer records only within authorized organization/branch. Public QR claim must use generic messages.

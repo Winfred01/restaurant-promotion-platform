@@ -23,7 +23,8 @@ export function WorkspaceFrame({
   accountActions,
   organizationName,
   branchName,
-  role
+  role,
+  guidedDemo
 }: {
   children: ReactNode;
   navigation: ReactNode;
@@ -31,6 +32,7 @@ export function WorkspaceFrame({
   organizationName: string;
   branchName: string;
   role: string;
+  guidedDemo?: boolean;
 }) {
   const pathname = usePathname();
   const analytics = /^\/app\/[^/]+\/[^/]+\/manager\/?$/.test(pathname);
@@ -66,6 +68,11 @@ export function WorkspaceFrame({
           </button>
         )}
         <div className="workspace-context mt-8 rounded-xl bg-teal-50 p-4 text-sm">
+          {guidedDemo ? (
+            <p className="mb-3 bg-teal-900 px-3 py-2 font-semibold text-white">
+              Isolated demo session
+            </p>
+          ) : null}
           <p className="font-semibold text-slate-950">{organizationName}</p>
           <p className="mt-1 text-slate-700">{branchName}</p>
           <p className="workspace-role mt-2 font-semibold text-teal-800">{role}</p>

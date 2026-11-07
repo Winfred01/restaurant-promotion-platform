@@ -45,7 +45,7 @@ export default function Home() {
             A restaurant promotion platform for staff checkout, one-time customer acquisition
             capture, and honest promotion reporting.
           </p>
-          <Link href="/login" className={styles.heroAction}>
+          <Link href="/demo" className={styles.heroAction}>
             Open the demo
           </Link>
         </div>
@@ -117,11 +117,11 @@ export default function Home() {
         <h2 id="demo-title">Try the real workflow</h2>
         <p>
           The demo currently runs locally with an isolated seeded database. A public URL will be
-          added after deployment and smoke verification. Employee sign-in opens the working
-          application; guided role entry is planned.
+          added after deployment and smoke verification. Guided role entry opens isolated sessions
+          when the dedicated demo environment is configured.
         </p>
-        <Link href="/login" className={styles.demoLink}>
-          Sign in
+        <Link href="/demo" className={styles.demoLink}>
+          Choose a role
         </Link>
       </section>
 

@@ -1,5 +1,6 @@
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
+import { MembershipRole } from "@prisma/client";
 
 import { signOut } from "@/auth";
 import { getCurrentEmployeeSession } from "@/server/auth/session";
@@ -50,6 +51,7 @@ export default async function BranchLayout({
       organizationName={branch.organization.name}
       branchName={branch.name}
       role={role}
+      guidedDemo={Boolean(session.user.demoLeaseId)}
       navigation={
         <nav aria-label="Workspace" className="mt-8 flex flex-wrap gap-2 lg:flex-col">
           {workspaceLinks(basePath, role).map((link) => (
@@ -67,7 +69,7 @@ export default async function BranchLayout({
           <form
             action={async () => {
               "use server";
-              await signOut({ redirectTo: "/login" });
+              await signOut({ redirectTo: session.user.demoLeaseId ? "/demo" : "/login" });
             }}
             className="mt-5"
           >
@@ -78,6 +80,42 @@ export default async function BranchLayout({
         </>
       }
     >
+      {session.user.demoLeaseId ? (
+        <details className="mb-8 bg-teal-950 p-5 text-white" open>
+          <summary className="cursor-pointer font-semibold">Guided demo: {role} next steps</summary>
+          {role === MembershipRole.STAFF ? (
+            <p className="mt-3 text-sm leading-6">
+              Open{" "}
+              <Link className="underline" href={`${basePath}/checkout`}>
+                Staff checkout
+              </Link>
+              . Look up (416) 555-0103, compare Best Deal, then use a new receipt to redeem. Create
+              another fictional customer to see one-time acquisition channel capture.
+            </p>
+          ) : role === MembershipRole.MANAGER ? (
+            <p className="mt-3 text-sm leading-6">
+              Start in{" "}
+              <Link className="underline" href={`${basePath}/manager/promotions`}>
+                Promotions
+              </Link>
+              , then try checkout and review{" "}
+              <Link className="underline" href={`${basePath}/manager/redemptions`}>
+                redemption history and void
+              </Link>
+              . The branch dashboard shows promotion-linked sales and discounts.
+            </p>
+          ) : (
+            <p className="mt-3 text-sm leading-6">
+              Inspect both branches, then open{" "}
+              <Link className="underline" href={`${basePath}/owner`}>
+                organization analytics
+              </Link>
+              . Manage promotions, try checkout and Best Deal, and review voided history.
+              Acquisition channels and promotion results are separate reports.
+            </p>
+          )}
+        </details>
+      ) : null}
       {children}
     </WorkspaceFrame>
   );

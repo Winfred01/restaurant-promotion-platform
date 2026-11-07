@@ -18,6 +18,11 @@ export default async function WorkspaceSelectionPage() {
       </p>
       <h1 className="mt-4 text-4xl font-semibold text-slate-950">Choose a branch</h1>
       <p className="mt-3 text-slate-600">Signed in as {session.user.name}</p>
+      {session.user.demoLeaseId ? (
+        <p className="mt-5 bg-teal-900 px-4 py-3 font-semibold text-white">
+          Isolated demo session · Choose a branch to see your role guide
+        </p>
+      ) : null}
       {branches.length ? (
         <ul className="mt-10 grid gap-4 sm:grid-cols-2">
           {branches.map((branch) => (
@@ -42,7 +47,7 @@ export default async function WorkspaceSelectionPage() {
       <form
         action={async () => {
           "use server";
-          await signOut({ redirectTo: "/login" });
+          await signOut({ redirectTo: session.user.demoLeaseId ? "/demo" : "/login" });
         }}
         className="mt-8"
       >

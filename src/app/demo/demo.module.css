@@ -1,0 +1,211 @@
+@font-face {
+  font-family: "IBM Plex Sans";
+  src: url("/fonts/ibm-plex-sans-latin.woff2") format("woff2");
+  font-display: swap;
+}
+
+.page {
+  --ink: #142a24;
+  --field: #143d35;
+  --paper: #f7f8f5;
+  --accent: #c9ef5b;
+  min-height: 100svh;
+  color: var(--ink);
+  background: var(--paper);
+  font-family: "IBM Plex Sans", sans-serif;
+}
+
+.page * {
+  box-sizing: border-box;
+}
+.page :is(a, button):focus-visible {
+  outline: 3px solid #377d59;
+  outline-offset: 4px;
+}
+
+.header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 24px;
+  padding: 24px clamp(20px, 3vw, 48px);
+  font-size: 15px;
+}
+
+.header a {
+  color: inherit;
+  text-underline-offset: 5px;
+}
+.brand {
+  font-weight: 700;
+  text-decoration: none;
+}
+
+.hero {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 260px;
+  align-items: end;
+  gap: 48px;
+  padding: clamp(48px, 7vw, 100px) clamp(20px, 3vw, 48px) 80px;
+}
+
+.hero h1 {
+  max-width: 860px;
+  margin: 0;
+  font-size: clamp(52px, 6vw, 100px);
+  line-height: 0.96;
+  letter-spacing: -0.045em;
+}
+
+.hero p {
+  max-width: 660px;
+  margin: 30px 0 0;
+  font-size: clamp(18px, 2vw, 22px);
+  line-height: 1.45;
+}
+
+.status {
+  padding: 16px 20px;
+  background: var(--field);
+  color: var(--paper);
+  font-size: 16px;
+  font-weight: 600;
+}
+
+.error {
+  margin: 0 clamp(20px, 3vw, 48px) 24px;
+  padding: 16px 20px;
+  background: #ffe8df;
+  color: #812d21;
+  font-weight: 600;
+}
+
+.roles {
+  padding: 48px clamp(20px, 3vw, 48px) 86px;
+  background: var(--field);
+  color: var(--paper);
+}
+
+.roles h2,
+.disabled h2,
+.note h2 {
+  margin: 0 0 34px;
+  font-size: clamp(32px, 4vw, 58px);
+  line-height: 1;
+  letter-spacing: -0.035em;
+}
+
+.roleList {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 16px;
+}
+.role {
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  gap: 45px;
+  min-height: 320px;
+  padding: 24px;
+  background: var(--paper);
+  color: var(--ink);
+}
+.role h3 {
+  margin: 0;
+  font-size: clamp(30px, 3vw, 46px);
+  letter-spacing: -0.035em;
+}
+.role p {
+  max-width: 360px;
+  margin: 16px 0;
+  font-size: 18px;
+  line-height: 1.4;
+}
+.role span {
+  font-size: 15px;
+}
+.role button {
+  min-height: 54px;
+  width: 100%;
+  padding: 13px 16px;
+  border: 0;
+  background: var(--accent);
+  color: var(--ink);
+  cursor: pointer;
+  font: inherit;
+  font-weight: 700;
+  text-align: left;
+}
+.role button:hover {
+  background: #e2ff91;
+}
+.role button span {
+  float: right;
+  font-size: 22px;
+  line-height: 1;
+}
+
+.disabled {
+  padding: 60px clamp(20px, 3vw, 48px);
+  background: var(--field);
+  color: var(--paper);
+}
+.disabled p {
+  max-width: 620px;
+  font-size: 19px;
+  line-height: 1.5;
+}
+.note {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 40px;
+  padding: 82px clamp(20px, 3vw, 48px) 120px;
+}
+.note p {
+  max-width: 660px;
+  margin: 0;
+  font-size: 20px;
+  line-height: 1.5;
+}
+
+@media (max-width: 900px) {
+  .hero {
+    grid-template-columns: 1fr;
+    gap: 28px;
+    padding-bottom: 54px;
+  }
+  .status {
+    justify-self: start;
+  }
+  .roleList {
+    grid-template-columns: 1fr;
+  }
+  .role {
+    min-height: 0;
+    gap: 26px;
+  }
+  .note {
+    grid-template-columns: 1fr;
+  }
+}
+
+@media (max-width: 500px) {
+  .header {
+    align-items: start;
+    flex-direction: column;
+    gap: 10px;
+  }
+  .hero h1 {
+    font-size: clamp(46px, 12vw, 64px);
+  }
+  .role h3 {
+    font-size: 34px;
+  }
+  .role p {
+    font-size: 17px;
+  }
+  .note {
+    padding-top: 64px;
+    padding-bottom: 80px;
+  }
+}

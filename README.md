@@ -40,7 +40,7 @@ accounts or bypass authentication. The three email addresses are:
 
 All three use the password supplied at seed time. After sign-in, `/app` lists the branches available
 to the employee and opens an authenticated workspace with role-aware navigation and sign-out.
-`/demo` redirects to `/app`. Staff, Manager, and Owner can open the Staff checkout page from a
+`/demo` offers isolated guided role entry when configured as described below. Staff, Manager, and Owner can open the Staff checkout page from a
 branch workspace. It looks up customers, captures an acquisition channel only for new customers,
 compares eligible promotions with an advisory Best Deal, and confirms one redemption against the
 live checkout service. Customers have no login.
@@ -69,6 +69,50 @@ fresh runtime confirmation and password. Never point the reset at a production d
 refuses to overwrite an existing demo organization, and its `DEMO_SEED_CREATED` audit row records
 the dataset counts. Database destruction removes in-database audit history, so retain the external
 operator log and provider audit trail. There is no HTTP seed or reset route.
+
+### Isolated guided demo sessions
+
+The public `/demo` role selector is disabled by default. Use a **dedicated demo PostgreSQL database**;
+its database name must include `demo`. Set a strong `AUTH_SECRET` (at least 32 characters) and
+`DEMO_PUBLIC_ENTRY=1` only for that environment. Run migrations and provision a finite pool of
+independent, fictional restaurant tenants from an operator shell:
+
+```powershell
+$env:DEMO_PUBLIC_ENTRY = "1"
+$env:DEMO_POOL_CONFIRM = "restaurant-demo-pool"
+$env:DEMO_POOL_COUNT = "12"
+npm.cmd run prisma:migrate:deploy
+npm.cmd run provision:demo-pool
+Remove-Item Env:DEMO_POOL_CONFIRM, Env:DEMO_POOL_COUNT
+```
+
+Set `DATABASE_URL` and `AUTH_SECRET` in the runtime environment before these commands; never put a
+real credential in the repository. The provisioning command also works for a dedicated demo deployment
+built with `NODE_ENV=production` because it is an operator-only CLI, not an HTTP endpoint. It refuses
+non-demo database names, missing confirmation, and pool counts outside 1–50. Every pool tenant has
+separate customers, promotions, memberships, audit records, and random unavailable employee passwords.
+The role selector atomically claims one unused tenant per visit, issues a single-use 60-second sign-in
+ticket, and creates an Auth.js session for that tenant's selected employee role. The session expires
+after two hours. Altering an organization, branch, or role in the URL cannot grant more permissions;
+the normal server-side tenant and RBAC checks still apply. A visitor may choose another role, which
+claims a fresh isolated tenant. The selector cannot run seed, reset, or migrations.
+
+Visitor script: choose Owner to inspect both branches, promotions, organization analytics, and the
+separate original-channel report; choose Manager to create a promotion, try Staff checkout, review
+branch analytics, and void a completed redemption with a reason; choose Staff to look up fictional
+`(416) 555-0103`, compare Best Deal, complete checkout with a new receipt, then create a new
+fictional customer and capture an acquisition channel once. The persistent workspace banner identifies
+the demo session and gives role-appropriate next steps. Each visit uses its own data, so another
+visitor's edits cannot change this walkthrough.
+
+Monitor the count of `DemoTenantLease` rows with `status = AVAILABLE` through an authenticated
+database console. When low, run the same confirmed provisioning command to add tenants. Never recycle
+a claimed tenant for a different visitor. For a full reset, record the demo database identifier, time,
+reason, and operator in an external change log, disable `DEMO_PUBLIC_ENTRY`, stop the app, destroy and
+recreate **only** that dedicated demo database in the provider console, rerun migrations and pool
+provisioning, verify an Owner/Manager/Staff visit in separate browser profiles, then re-enable entry.
+Database destruction also removes its in-database audit trail, so retain the external change log and
+provider audit records. No public seed or reset endpoint exists.
 
 ### Public Demo URL
 

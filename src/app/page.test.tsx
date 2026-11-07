@@ -13,6 +13,7 @@ describe("public landing page", () => {
     expect(html).toContain("promotion-linked sales");
     expect(html).toContain("public URL will be");
     expect(html).toContain('href="/login"');
+    expect(html).toContain('href="/demo"');
     expect(html).toContain("https://github.com/Winfred01/restaurant-promotion-platform");
     expect(html).toContain('href="#home-title"');
   });

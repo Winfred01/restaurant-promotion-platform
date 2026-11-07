@@ -81,6 +81,11 @@ their status changes; all claim foreign keys use organization-scoped relationshi
 deletion. The staff-assisted service sets source `STAFF` and writes an audit record in the same
 transaction. Bill subtotal and spend-threshold checks occur again at checkout.
 
+Public QR claims use source `QR` and a null employee actor. Database checks require Staff claims
+to retain a non-null employee actor and allow anonymous audit rows only for QR claim creation.
+`PublicClaimRateLimit` stores HMAC-only fixed-window counters keyed by IP, branch, promotion, and
+phone scope; expired counters are pruned by an operator command after a 24-hour retention margin.
+
 ### Redemption
 
 Permanent bill-level redemption record. Fields: `id`, `organizationId`, `branchId`, `customerId`, `promotionId`, `promotionCodeId`, `claimId`, `redeemedByUserId`, `receiptNumber`, `billSubtotalCents`, `discountCents`, `netBillCents`, `status`, `redeemedAt`, `voidedAt`.

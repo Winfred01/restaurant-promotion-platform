@@ -10,19 +10,19 @@ jobs:
   validate:
     runs-on: ubuntu-latest
     env:
-      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_promotion_platform?schema=public
+      DATABASE_URL: postgresql://postgres:postgres@localhost:5432/restaurant_promotion_demo?schema=public
 
     services:
       postgres:
         image: postgres:18-alpine
         env:
-          POSTGRES_DB: restaurant_promotion_platform
+          POSTGRES_DB: restaurant_promotion_demo
           POSTGRES_USER: postgres
           POSTGRES_PASSWORD: postgres
         ports:
           - 5432:5432
         options: >-
-          --health-cmd "pg_isready -U postgres -d restaurant_promotion_platform"
+          --health-cmd "pg_isready -U postgres -d restaurant_promotion_demo"
           --health-interval 5s
           --health-timeout 5s
           --health-retries 10
@@ -52,6 +52,12 @@ jobs:
       - name: Lint
         run: npm run lint
 
+      - name: Format
+        run: npm run format
+
+      - name: Production dependency audit
+        run: npm audit --omit=dev
+
       - name: Typecheck
         run: npm run typecheck
 
@@ -60,3 +66,33 @@ jobs:
 
       - name: Build
         run: npm run build
+
+      - name: Install Chromium
+        run: npx playwright install --with-deps chromium
+
+      - name: Browser E2E and security review
+        env:
+          AUTH_URL: http://localhost:3100
+          DEMO_PUBLIC_ENTRY: "1"
+          DEMO_LOGIN_ENABLED: "1"
+        run: |
+          export AUTH_SECRET="$(openssl rand -hex 32)"
+          export E2E_DEMO_PASSWORD="$(openssl rand -hex 24)"
+          export DEMO_SEED_PASSWORD="$E2E_DEMO_PASSWORD"
+          export DEMO_SEED_DATABASE=restaurant_promotion_demo
+          export DEMO_SEED_CONFIRM=restaurant-demo
+          npm run seed:demo
+          export DEMO_POOL_CONFIRM=restaurant-demo-pool
+          export DEMO_POOL_COUNT=2
+          npm run provision:demo-pool
+          npm run e2e
+
+      - name: Upload browser artifacts on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: playwright-failure
+          path: |
+            output/playwright/results/
+            playwright-report/
+          if-no-files-found: ignore

@@ -27,7 +27,7 @@ export function LoginForm({ showDemoAccounts }: { showDemoAccounts: boolean }) {
         redirect: false
       });
 
-      if (!result?.ok) {
+      if (!result?.ok || result.error) {
         setError("We could not sign you in. Check your email and password.");
         return;
       }

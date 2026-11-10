@@ -103,7 +103,12 @@ describe("staff checkout workflow", () => {
       discountCents: 200,
       netBillCents: 1000
     });
-    const input = { ...base, promotionId: "promotion-a", receiptNumber: "R-1" };
+    const input = {
+      ...base,
+      promotionId: "promotion-a",
+      receiptNumber: "R-1",
+      expectedDiscountCents: 200
+    };
     const result = await createStaffCheckoutWorkflow(db.client, session).redeem(input);
     expect(mocks.authorize).toHaveBeenCalledWith({
       organizationId: "org-a",

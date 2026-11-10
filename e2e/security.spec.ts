@@ -2,12 +2,30 @@ import { spawnSync } from "node:child_process";
 
 import { expect, test, type Browser } from "@playwright/test";
 
-async function enterDemo(browser: Browser) {
+async function enterDemo(browser: Browser, withPreviousCheckout = false) {
   const context = await browser.newContext({ viewport: { width: 390, height: 844 } });
   const page = await context.newPage();
+  const drafts = () =>
+    page.evaluate(() =>
+      Object.keys(sessionStorage).filter((key) => key.startsWith("staff-checkout:"))
+    );
+  if (withPreviousCheckout) {
+    await page.goto("/login");
+    await page.getByLabel("Email").fill("staff@restaurant-demo.example.com");
+    await page.getByLabel("Password").fill(process.env.E2E_DEMO_PASSWORD!);
+    await page.getByRole("button", { name: "Sign in" }).click();
+    await page.getByRole("link", { name: /Downtown Demo/ }).click();
+    await page.getByRole("link", { name: "Staff checkout", exact: true }).click();
+    await page.getByLabel("Phone number").fill("4165550103");
+    await page.getByRole("button", { name: "Find customer" }).click();
+    await page.getByRole("button", { name: "Continue to bill" }).click();
+    await page.getByLabel("Receipt number").fill("BEFORE-DEMO-76");
+    expect(await drafts()).toHaveLength(1);
+  }
   await page.goto("/demo");
   await page.getByRole("button", { name: "Enter as Staff" }).click();
   await expect(page).toHaveURL(/\/app\/?$/);
+  expect(await drafts()).toEqual([]);
   await page.getByRole("link", { name: /Downtown Demo/ }).click();
   await expect(page).toHaveURL(/\/app\/[^/]+\/[^/]+\/?$/);
   await expect(page.getByText("Isolated demo session").first()).toBeVisible();
@@ -17,7 +35,7 @@ async function enterDemo(browser: Browser) {
 test("guided visitors receive separate tenants and mobile Staff access stays scoped", async ({
   browser
 }) => {
-  const first = await enterDemo(browser);
+  const first = await enterDemo(browser, true);
   const second = await enterDemo(browser);
   expect(first.branchPath.split("/")[2]).not.toBe(second.branchPath.split("/")[2]);
 
@@ -35,11 +53,25 @@ test("guided visitors receive separate tenants and mobile Staff access stays sco
   });
   expect(foreignQuote.status()).toBe(403);
 
+  await first.page.goto(`${first.branchPath}/checkout`);
+  await first.page.getByLabel("Phone number").fill("4165550103");
+  await first.page.getByRole("button", { name: "Find customer" }).click();
+  await first.page.getByRole("button", { name: "Continue to bill" }).click();
+  await first.page.getByLabel("Receipt number").fill("FOREIGN-TENANT-76");
+  const foreignDraft = await first.page.evaluate(() => {
+    const key = Object.keys(sessionStorage).find((entry) => entry.startsWith("staff-checkout:"))!;
+    return { key, value: sessionStorage.getItem(key)! };
+  });
+  await second.page.evaluate(({ key, value }) => sessionStorage.setItem(key, value), foreignDraft);
   await second.page.goto(`${second.branchPath}/checkout`);
+  await expect(second.page.getByRole("dialog", { name: "Promotion checkout" })).toBeHidden();
+  await expect(second.page.getByLabel("Phone number")).toBeEmpty();
   await second.page.getByLabel("Phone number").fill("4165550103");
   await second.page.getByRole("button", { name: "Find customer" }).click();
   await expect(second.page.getByText(/Returning customer found/)).toBeVisible();
   await expect(second.page.getByLabel("Acquisition channel")).toHaveCount(0);
+  await second.page.getByRole("button", { name: "Continue to bill" }).click();
+  await expect(second.page.getByLabel("Receipt number")).toBeEmpty();
   await second.page.getByLabel("Bill subtotal ($)").fill("40.00");
   await second.page.getByLabel("Receipt number").fill("E2E-MOBILE-01");
   await second.page.getByRole("button", { name: "Show offers" }).click();

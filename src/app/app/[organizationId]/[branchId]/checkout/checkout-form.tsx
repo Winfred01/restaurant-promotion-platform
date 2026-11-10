@@ -1,380 +1,866 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useEffectEvent, useRef, useState, type FormEvent } from "react";
 
-import { money, parseSubtotalCents } from "./checkout-input";
+import { normalizePhoneNumber } from "@/server/customers/phone";
+import {
+  CheckoutRequestError,
+  checkoutRequest,
+  redemptionIssue,
+  type Customer,
+  type Offer
+} from "./checkout-api";
+import { CheckoutDialog } from "./checkout-dialog";
+import {
+  checkoutDraftKey,
+  checkoutDraftLifetimeMs,
+  readCheckoutDraft,
+  type CheckoutDraft,
+  type CheckoutStep
+} from "./checkout-draft";
+import { isValidReceipt, money, parseSubtotalCents } from "./checkout-input";
+import styles from "./checkout-wizard.module.css";
 
-type Customer = { id: string; phoneNumberDisplay: string };
-type Offer = {
-  promotionId: string;
-  name: string;
-  eligible: boolean;
-  reasonCodes: string[];
-  discountCents: number;
-  finalBillCents: number;
-  isBestDeal: boolean;
-};
-type CheckoutSuccess = {
-  id: string;
-  receiptNumber: string;
-  billSubtotalCents: number;
-  discountCents: number;
-  netBillCents: number;
-};
+const field =
+  "mt-2 w-full min-h-11 rounded-md border border-slate-400 bg-white px-3 py-2 text-base text-slate-950";
+const primary =
+  "min-h-11 rounded-md bg-teal-800 px-4 py-2 font-semibold text-white hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50";
+const secondary =
+  "min-h-11 rounded-md px-3 py-2 font-semibold text-slate-700 hover:bg-slate-100 disabled:opacity-50";
+const steps = [
+  { number: 1, title: "Confirm customer", short: "Customer" },
+  { number: 2, title: "Enter bill", short: "Bill" },
+  { number: 3, title: "Choose promotion", short: "Promotion" },
+  { number: 4, title: "Confirm redemption", short: "Confirm" }
+] as const;
 
-async function responseBody<T>(response: Response): Promise<T> {
-  const body = await response.json();
-  if (!response.ok) throw new Error(body?.error?.message ?? "Request failed. Please try again.");
-  return body as T;
+type Alert = NonNullable<ReturnType<typeof redemptionIssue>> | "discard";
+
+function phoneSuffix(value: string) {
+  return value.replace(/\D/g, "").slice(-4);
 }
 
-function maskedPhone(value: string) {
-  const digits = value.replace(/\D/g, "");
-  return digits.length >= 4 ? `ending in ${digits.slice(-4)}` : "found";
+function errorMessage(error: unknown, fallback: string) {
+  return error instanceof CheckoutRequestError ? error.message : fallback;
 }
 
 export function CheckoutForm({
   organizationId,
   branchId,
+  branchName,
+  employeeId,
   channels
 }: {
   organizationId: string;
   branchId: string;
+  branchName: string;
+  employeeId: string;
   channels: { id: string; name: string }[];
 }) {
+  const key = checkoutDraftKey(organizationId, branchId, employeeId);
   const [phone, setPhone] = useState("");
   const [customer, setCustomer] = useState<Customer | null>(null);
-  const [isNewCustomer, setIsNewCustomer] = useState(false);
-  const [lookup, setLookup] = useState<"idle" | "missing" | "found">("idle");
-  const [channelId, setChannelId] = useState("");
-  const [subtotal, setSubtotal] = useState("");
-  const [receipt, setReceipt] = useState("");
+  const [draft, setDraft] = useState<CheckoutDraft | null>(null);
+  const [open, setOpen] = useState(false);
   const [offers, setOffers] = useState<Offer[] | null>(null);
-  const [selected, setSelected] = useState("");
-  const [success, setSuccess] = useState<CheckoutSuccess | null>(null);
   const [error, setError] = useState("");
+  const [alert, setAlert] = useState<Alert | null>(null);
+  const [notice, setNotice] = useState("");
+  const [toast, setToast] = useState("");
   const [busy, setBusy] = useState(false);
 
-  function resetQuote() {
-    setOffers(null);
-    setSelected("");
-    setSuccess(null);
-  }
+  const request = useRef<AbortController | null>(null);
+  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const stepHeading = useRef<HTMLHeadingElement>(null);
+  const phoneInput = useRef<HTMLInputElement>(null);
+  const returnToPhone = useRef(false);
 
-  async function findCustomer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setCustomer(null);
-    setIsNewCustomer(false);
-    setLookup("idle");
-    resetQuote();
-    setBusy(true);
+  const eligible = offers?.filter((offer) => offer.eligible) ?? [];
+  const selectedOffer = eligible.find((offer) => offer.promotionId === draft?.selected);
+  const step = draft?.step ?? 1;
+
+  function persist(next: CheckoutDraft) {
+    const saved = { ...next, expiresAt: Date.now() + checkoutDraftLifetimeMs };
+    setDraft(saved);
     try {
-      const query = new URLSearchParams({ organizationId, branchId, phoneNumber: phone });
-      const result = await responseBody<{ customer: Customer | null }>(
-        await fetch(`/api/staff/customers?${query}`, { cache: "no-store" })
-      );
-      setCustomer(result.customer);
-      setIsNewCustomer(false);
-      setLookup(result.customer ? "found" : "missing");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Customer lookup failed.");
-    } finally {
-      setBusy(false);
+      sessionStorage.setItem(key, JSON.stringify(saved));
+      return true;
+    } catch {
+      return false;
     }
   }
 
-  async function createCustomer(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
+  function showToast(message: string) {
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    setToast(message);
+    toastTimeout.current = setTimeout(() => setToast(""), 2000);
+  }
+
+  async function run(
+    task: (signal: AbortSignal) => Promise<void>,
+    onError: (cause: unknown) => void
+  ) {
+    if (request.current) return;
+    const controller = new AbortController();
+    request.current = controller;
     setError("");
-    if (!channelId) {
+    setBusy(true);
+    try {
+      await task(controller.signal);
+    } catch (cause) {
+      if (!controller.signal.aborted) onError(cause);
+    } finally {
+      if (request.current === controller) {
+        request.current = null;
+        setBusy(false);
+      }
+    }
+  }
+
+  async function lookupCustomer(number: string, signal: AbortSignal) {
+    const result = await checkoutRequest<{ customer: Customer | null }>(
+      "/api/staff/customers",
+      signal,
+      { action: "lookup", organizationId, branchId, phoneNumber: number }
+    );
+    return result.customer;
+  }
+
+  async function getOffers(
+    next: CheckoutDraft,
+    currentCustomer: Customer,
+    billSubtotalCents: number,
+    signal: AbortSignal
+  ) {
+    const result = await checkoutRequest<{ offers: Offer[] }>("/api/staff/checkout", signal, {
+      action: "quote",
+      organizationId,
+      branchId,
+      customerId: currentCustomer.id,
+      billSubtotalCents
+    });
+    const retained = result.offers.some(
+      (offer) => offer.eligible && offer.promotionId === next.selected
+    );
+    setOffers(result.offers);
+    persist({
+      ...next,
+      step: next.step === 4 && retained ? 4 : 3,
+      selected: retained ? next.selected : ""
+    });
+  }
+
+  async function openCheckout(number: string, saved: CheckoutDraft | null, signal: AbortSignal) {
+    if (saved?.redemptionPending) {
+      setDraft({ ...saved, step: 2 });
+      setOffers(null);
+      setOpen(true);
+      setNotice("");
+      return;
+    }
+    const found = await lookupCustomer(number, signal);
+    const samePhone = saved?.phone === number;
+    const next: CheckoutDraft = {
+      phone: number,
+      step: found && samePhone ? saved.step : 1,
+      channelId:
+        !found && samePhone && channels.some(({ id }) => id === saved.channelId)
+          ? saved.channelId
+          : "",
+      subtotal: saved?.subtotal ?? "",
+      receipt: saved?.receipt ?? "",
+      selected: found && samePhone ? saved.selected : "",
+      expiresAt: 0
+    };
+    const subtotal = parseSubtotalCents(next.subtotal);
+    setCustomer(found ? { id: found.id } : null);
+    setOffers(null);
+    setOpen(true);
+    setNotice("");
+    if (found && next.step >= 3 && subtotal !== null && isValidReceipt(next.receipt)) {
+      persist({ ...next, step: 3 });
+      await getOffers(next, found, subtotal, signal);
+    } else {
+      persist({ ...next, step: next.step >= 3 ? 2 : next.step });
+    }
+  }
+
+  const restore = useEffectEvent(() => {
+    let saved: CheckoutDraft | null;
+    try {
+      saved = readCheckoutDraft(sessionStorage, key);
+    } catch {
+      return;
+    }
+    if (!saved) return;
+    setPhone(saved.phone);
+    setDraft(saved);
+    void run(
+      (signal) => openCheckout(saved.phone, saved, signal),
+      (cause) => setError(errorMessage(cause, "The draft could not be verified. Try again."))
+    );
+  });
+
+  useEffect(() => {
+    const timer = setTimeout(() => restore(), 0);
+    return () => {
+      clearTimeout(timer);
+      request.current?.abort();
+      request.current = null;
+      if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    };
+  }, [key]);
+
+  const expireDraft = useEffectEvent(() => {
+    if (request.current) return;
+    resetCheckout();
+    setNotice("The checkout draft expired.");
+  });
+
+  useEffect(() => {
+    if (!draft) return;
+    const timer = setTimeout(() => expireDraft(), Math.max(0, draft.expiresAt - Date.now()));
+    return () => clearTimeout(timer);
+  }, [draft, busy]);
+
+  useEffect(() => {
+    if (open && !alert) stepHeading.current?.focus();
+    if (!open && !busy && returnToPhone.current) {
+      returnToPhone.current = false;
+      phoneInput.current?.focus();
+    }
+  }, [open, step, alert, busy]);
+
+  function findCustomer(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    const saved = draft && draft.expiresAt > Date.now() ? draft : null;
+    let number: string;
+    try {
+      number = saved?.redemptionPending ? saved.phone : normalizePhoneNumber(phone);
+    } catch {
+      setError("Enter a valid phone number, including the country code for international numbers.");
+      return;
+    }
+    void run(
+      (signal) => openCheckout(number, saved, signal),
+      (cause) => setError(errorMessage(cause, "Customer lookup failed. Try again."))
+    );
+  }
+
+  function goTo(nextStep: CheckoutStep) {
+    if (!draft || draft.redemptionPending) return;
+    setError("");
+    persist({ ...draft, step: nextStep });
+  }
+
+  function closeWizard(changePhone = false) {
+    if (!draft || request.current || alert) return;
+    const saved = persist(draft);
+    setPhone(draft.phone);
+    setError("");
+    setNotice(
+      draft.redemptionPending
+        ? "Redemption outcome unknown. Reopen checkout to review the receipt."
+        : changePhone
+          ? "Enter a different phone number to change the customer and keep the bill details."
+          : saved
+            ? "Draft saved in this tab for 30 minutes. Find the customer again to resume."
+            : "Draft kept while this page is open. Browser storage is unavailable."
+    );
+    returnToPhone.current = true;
+    setOpen(false);
+  }
+
+  function resetCheckout() {
+    try {
+      sessionStorage.removeItem(key);
+    } catch {
+      // A blocked storage API cannot be used to restore a draft.
+    }
+    if (toastTimeout.current) clearTimeout(toastTimeout.current);
+    setToast("");
+    setOpen(false);
+    setPhone("");
+    setCustomer(null);
+    setDraft(null);
+    setOffers(null);
+    setError("");
+    setAlert(null);
+    setNotice("");
+    returnToPhone.current = true;
+  }
+
+  function confirmCustomer() {
+    if (!draft) return;
+    if (customer) {
+      goTo(2);
+      return;
+    }
+    if (!draft.channelId) {
       setError("Choose an acquisition channel for this new customer.");
       return;
     }
-    setBusy(true);
-    try {
-      const result = await responseBody<{ customer: Customer; isNewCustomer: boolean }>(
-        await fetch("/api/staff/customers", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+    void run(
+      async (signal) => {
+        const result = await checkoutRequest<{ customer: Customer; isNewCustomer: boolean }>(
+          "/api/staff/customers",
+          signal,
+          {
             organizationId,
             branchId,
-            phoneNumber: phone,
-            acquisitionChannelId: channelId
-          })
-        })
-      );
-      setCustomer(result.customer);
-      setIsNewCustomer(result.isNewCustomer);
-      setLookup("found");
-      setChannelId("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Customer creation failed.");
-    } finally {
-      setBusy(false);
-    }
+            phoneNumber: draft.phone,
+            acquisitionChannelId: draft.channelId
+          }
+        );
+        setCustomer({ id: result.customer.id });
+        persist({ ...draft, channelId: "", step: 2 });
+        if (result.isNewCustomer)
+          showToast("Customer created · phone ending in " + phoneSuffix(draft.phone));
+      },
+      (cause) => setError(errorMessage(cause, "Customer creation failed. Try again."))
+    );
   }
 
-  async function quote(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    resetQuote();
-    const billSubtotalCents = parseSubtotalCents(subtotal);
-    if (!customer || billSubtotalCents === null) {
-      setError("Enter a valid bill subtotal greater than zero.");
+  function refreshOffers(verifyCustomer = false) {
+    if (!draft || !customer || request.current) return;
+    const subtotal = parseSubtotalCents(draft.subtotal);
+    if (subtotal === null || !isValidReceipt(draft.receipt)) {
+      goTo(2);
+      setError(
+        subtotal === null
+          ? "Enter a subtotal greater than zero with up to two decimal places."
+          : "Enter a receipt number starting with a letter or number. You can also use spaces, periods, underscores, slashes and hyphens."
+      );
       return;
     }
-    setBusy(true);
-    try {
-      const result = await responseBody<{ offers: Offer[] }>(
-        await fetch("/api/staff/checkout", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
-            action: "quote",
-            organizationId,
-            branchId,
-            customerId: customer.id,
-            billSubtotalCents
-          })
-        })
-      );
-      setOffers(result.offers);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Quote failed.");
-    } finally {
-      setBusy(false);
-    }
+
+    const next = { ...draft, step: 3 } as const;
+    setOffers(null);
+    persist(next);
+    void run(
+      async (signal) => {
+        const current = verifyCustomer ? await lookupCustomer(next.phone, signal) : customer;
+        setCustomer(current ? { id: current.id } : null);
+        if (!current) {
+          persist({ ...next, step: 1, selected: "" });
+          setError("Customer details changed. Confirm the customer before continuing.");
+          return;
+        }
+        await getOffers(
+          current.id === customer.id ? next : { ...next, selected: "" },
+          current,
+          subtotal,
+          signal
+        );
+      },
+      (cause) => setError(errorMessage(cause, "Offers could not be loaded. Try again."))
+    );
   }
 
-  async function redeem() {
+  function editBill(update: { subtotal: string } | { receipt: string }) {
+    if (!draft || draft.redemptionPending) return;
+    setOffers(null);
     setError("");
-    const billSubtotalCents = parseSubtotalCents(subtotal);
-    if (!customer || !selected || !receipt.trim() || billSubtotalCents === null) {
-      setError("Select one offer and enter a receipt number and valid subtotal.");
+    persist({ ...draft, ...update });
+  }
+
+  function redeem() {
+    if (
+      !draft ||
+      draft.redemptionPending ||
+      draft.step !== 4 ||
+      !customer ||
+      !selectedOffer ||
+      alert ||
+      request.current
+    )
+      return;
+    const billSubtotalCents = parseSubtotalCents(draft.subtotal);
+    if (billSubtotalCents === null || !isValidReceipt(draft.receipt)) return;
+    const attempted = {
+      ...draft,
+      step: 2,
+      redemptionPending: true,
+      expiresAt: Date.now() + checkoutDraftLifetimeMs
+    } as const;
+    // Record uncertainty before the POST so reloads cannot reopen a ready-to-submit checkout.
+    try {
+      sessionStorage.setItem(key, JSON.stringify(attempted));
+    } catch {
+      setError("Enable tab storage before confirming. Checkout could not save a recovery draft.");
       return;
     }
-    setBusy(true);
-    try {
-      const result = await responseBody<CheckoutSuccess>(
-        await fetch("/api/staff/checkout", {
-          method: "POST",
-          headers: { "content-type": "application/json" },
-          body: JSON.stringify({
+    void run(
+      async (signal) => {
+        const result = await checkoutRequest<{ id: string }>(
+          "/api/staff/checkout",
+          AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
+          {
             action: "redeem",
             organizationId,
             branchId,
             customerId: customer.id,
-            promotionId: selected,
-            receiptNumber: receipt,
-            billSubtotalCents
-          })
-        })
-      );
-      setSuccess(result);
-      setOffers(null);
-      setSelected("");
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "Redemption failed.");
-      setOffers(null);
-      setSelected("");
-    } finally {
-      setBusy(false);
-    }
+            promotionId: selectedOffer.promotionId,
+            receiptNumber: draft.receipt.trim(),
+            billSubtotalCents,
+            expectedDiscountCents: selectedOffer.discountCents
+          },
+          201
+        );
+        if (typeof result.id !== "string" || !result.id) throw new Error("Unconfirmed redemption");
+        resetCheckout();
+        showToast("Redemption completed");
+      },
+      (cause) => {
+        const issue = redemptionIssue(cause);
+        setOffers(null);
+        persist(issue ? { ...draft, step: issue.target } : attempted);
+        if (issue) setAlert(issue);
+      }
+    );
   }
 
-  const field =
-    "mt-2 w-full rounded-lg border border-slate-300 bg-white px-3 py-2 text-slate-950 focus-visible:outline-2 focus-visible:outline-teal-700";
-  const button =
-    "rounded-lg bg-teal-800 px-4 py-2 font-semibold text-white hover:bg-teal-900 disabled:cursor-not-allowed disabled:opacity-50";
+  function next(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault();
+    if (request.current || alert || draft?.redemptionPending) return;
+    if (step === 1) confirmCustomer();
+    if (step === 2) refreshOffers();
+    if (step === 3 && selectedOffer) goTo(4);
+  }
+
+  const closeAlert = () => setAlert(null);
+  const toastStyle =
+    "pointer-events-none absolute right-3 bottom-[4.75rem] z-10 max-w-[calc(100%-1.5rem)]";
+  const toastContent = toast && (
+    <div className="rounded-md bg-teal-950 px-4 py-3 text-sm font-semibold text-white shadow-lg">
+      {toast}
+    </div>
+  );
 
   return (
-    <div className="mt-8 space-y-6">
-      {error && (
-        <p role="alert" className="rounded-lg border border-red-200 bg-red-50 p-4 text-red-800">
-          {error}
-        </p>
-      )}
-      {success && (
-        <section
-          role="status"
-          className="rounded-xl border border-emerald-300 bg-emerald-50 p-5 text-emerald-950"
-        >
-          <h2 className="text-lg font-semibold">Redemption completed</h2>
-          <p className="mt-2">
-            Receipt {success.receiptNumber}: {money(success.billSubtotalCents)} subtotal,{" "}
-            {money(success.discountCents)} discount, {money(success.netBillCents)} final amount.
-          </p>
-          <p className="mt-1 text-sm">Confirmation ID: {success.id}</p>
-        </section>
-      )}
-      <section className="rounded-2xl border border-slate-200 bg-white p-6">
-        <h2 className="text-lg font-semibold">1. Find customer</h2>
-        <form onSubmit={findCustomer} className="mt-4 flex flex-wrap items-end gap-3">
-          <label className="min-w-56 flex-1 text-sm font-medium">
+    <div className="mt-6">
+      <form
+        className="max-w-2xl rounded-xl border border-slate-200 bg-white p-4 sm:p-6"
+        onSubmit={findCustomer}
+      >
+        <div className="flex flex-wrap items-end gap-3">
+          <label className="min-w-0 flex-[1_1_15rem] text-sm font-semibold">
             Phone number
             <input
+              ref={phoneInput}
               className={field}
-              autoComplete="tel"
+              autoComplete="off"
               type="tel"
-              value={phone}
+              maxLength={64}
+              value={open ? "" : phone}
               onChange={(event) => {
                 setPhone(event.target.value);
-                setCustomer(null);
-                setIsNewCustomer(false);
-                setLookup("idle");
-                resetQuote();
+                setError("");
               }}
               disabled={busy}
               required
             />
           </label>
-          <button className={button} disabled={busy} type="submit">
-            Find customer
+          <button className={primary} disabled={busy} type="submit">
+            {busy && !open ? "Finding customer…" : "Find customer"}
           </button>
-        </form>
-        {lookup === "found" && customer && (
-          <p role="status" className="mt-4 text-sm text-emerald-800">
-            {isNewCustomer ? "New customer created" : "Returning customer found"}{" "}
-            {maskedPhone(customer.phoneNumberDisplay)}. Continue to checkout; acquisition channel is
-            already recorded.
+        </div>
+        {notice && (
+          <p role="status" className="mt-3 text-sm text-slate-600">
+            {notice}
           </p>
         )}
-        {lookup === "missing" && (
-          <form onSubmit={createCustomer} className="mt-5 rounded-xl bg-slate-50 p-4">
-            <p className="font-medium">New customer</p>
-            <p className="mt-1 text-sm text-slate-600">
-              Record their acquisition channel once before checkout.
-            </p>
-            <label className="mt-4 block text-sm font-medium">
-              Acquisition channel
-              <select
-                className={field}
-                value={channelId}
-                onChange={(event) => setChannelId(event.target.value)}
-                disabled={busy}
-                required
-              >
-                <option value="">Choose a channel</option>
-                {channels.map((channel) => (
-                  <option key={channel.id} value={channel.id}>
-                    {channel.name}
-                  </option>
-                ))}
-              </select>
-            </label>
-            {channels.length === 0 && (
-              <p className="mt-2 text-sm text-amber-800">
-                No active acquisition channels are available for this restaurant.
-              </p>
-            )}
-            <button
-              className={`${button} mt-4`}
-              disabled={busy || channels.length === 0}
-              type="submit"
-            >
-              Create customer
-            </button>
-          </form>
+        {!open && error && (
+          <p role="alert" className="mt-3 text-sm text-red-800">
+            {error}
+          </p>
         )}
-      </section>
-      {customer && (
-        <section className="rounded-2xl border border-slate-200 bg-white p-6">
-          <h2 className="text-lg font-semibold">2. Enter bill and compare offers</h2>
-          <form
-            onSubmit={quote}
-            className="mt-4 grid gap-4 sm:grid-cols-[1fr_1fr_auto] sm:items-end"
-          >
-            <label className="text-sm font-medium">
-              Bill subtotal ($)
-              <input
-                className={field}
-                inputMode="decimal"
-                placeholder="45.00"
-                value={subtotal}
-                onChange={(event) => {
-                  setSubtotal(event.target.value);
-                  resetQuote();
-                }}
-                disabled={busy}
-                required
-              />
-            </label>
-            <label className="text-sm font-medium">
-              Receipt number
-              <input
-                className={field}
-                maxLength={80}
-                value={receipt}
-                onChange={(event) => {
-                  setReceipt(event.target.value);
-                  resetQuote();
-                }}
-                disabled={busy}
-                required
-              />
-            </label>
-            <button className={button} disabled={busy} type="submit">
-              Show offers
-            </button>
-          </form>
-          {offers && (
-            <div className="mt-6">
-              <h3 className="font-semibold">Eligible promotions</h3>
-              {offers.length === 0 && (
-                <p className="mt-2 text-sm text-slate-600">
-                  No active promotions are available for this branch.
-                </p>
+      </form>
+      <div
+        role="status"
+        className="pointer-events-none fixed right-4 top-4 z-50 max-w-[calc(100%-2rem)]"
+      >
+        {!open && toastContent}
+      </div>
+
+      <CheckoutDialog
+        open={open && !!draft}
+        labelledBy="checkout-title"
+        describedBy="checkout-branch"
+        onDismiss={() => closeWizard()}
+        className={styles.dialog}
+      >
+        {draft && (
+          <div className={styles.layout} data-ui>
+            <header className="border-b border-slate-200 px-4 pt-4 sm:px-7 sm:pt-6">
+              <div className="flex items-start justify-between gap-3">
+                <div>
+                  <h2 id="checkout-title" className="text-2xl font-semibold tracking-tight">
+                    Promotion checkout
+                  </h2>
+                  <p id="checkout-branch" className="mt-1 text-sm text-slate-600">
+                    {branchName}
+                  </p>
+                </div>
+                <button
+                  className={secondary}
+                  type="button"
+                  disabled={busy}
+                  onClick={() => closeWizard()}
+                >
+                  Close <span className="sr-only">and keep draft</span>
+                </button>
+              </div>
+              <nav aria-label="Checkout progress" className="mt-4">
+                <ol className="grid grid-cols-4 gap-1 sm:gap-3">
+                  {steps.map(({ number, title, short }) => {
+                    const done = number < step;
+                    const current = number === step;
+                    const label = (
+                      <>
+                        {done ? (
+                          <svg aria-hidden="true" className="size-4 shrink-0" viewBox="0 0 16 16">
+                            <path
+                              d="m3 8 3 3 7-7"
+                              fill="none"
+                              stroke="currentColor"
+                              strokeWidth="1.6"
+                            />
+                          </svg>
+                        ) : (
+                          <span aria-hidden="true" className="font-semibold tabular-nums">
+                            {number}
+                          </span>
+                        )}
+                        <span className="hidden sm:inline">{title}</span>
+                        <span aria-hidden="true" className="sm:hidden">
+                          {short}
+                        </span>
+                        <span className="sr-only sm:hidden">{title}</span>
+                        {done && <span className="sr-only"> (completed)</span>}
+                      </>
+                    );
+                    const classes = [
+                      "flex min-h-12 w-full flex-col items-center justify-center gap-1 border-b-2 px-0.5 py-1.5 text-center text-xs leading-tight sm:flex-row sm:px-2 sm:text-sm",
+                      current
+                        ? "border-teal-700 bg-teal-50 font-semibold text-teal-950"
+                        : "border-transparent",
+                      done ? "font-medium text-teal-900 hover:bg-slate-100" : "text-slate-600"
+                    ].join(" ");
+                    return (
+                      <li key={number} aria-current={current ? "step" : undefined}>
+                        {done && !draft.redemptionPending ? (
+                          <button
+                            type="button"
+                            disabled={busy}
+                            className={classes}
+                            onClick={() => goTo(number)}
+                          >
+                            {label}
+                          </button>
+                        ) : (
+                          <span className={classes}>{label}</span>
+                        )}
+                      </li>
+                    );
+                  })}
+                </ol>
+              </nav>
+            </header>
+
+            <form
+              id="checkout-step-form"
+              onSubmit={next}
+              className={styles.content + " px-4 py-5 sm:px-7 sm:py-6"}
+            >
+              <h3 ref={stepHeading} tabIndex={-1} className="text-xl font-semibold outline-none">
+                <span className="sr-only">Step {step} of 4. </span>
+                {steps[step - 1].title}
+              </h3>
+              {draft.redemptionPending && (
+                <div
+                  role="alert"
+                  className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-950"
+                >
+                  <p className="font-semibold">Redemption outcome unknown</p>
+                  <p className="mt-1">
+                    This redemption may have completed. Ask a manager to check this receipt in this
+                    branch’s redemption history before starting over.
+                  </p>
+                </div>
               )}
-              {offers.length > 0 && offers.every((offer) => !offer.eligible) && (
-                <p className="mt-2 text-sm text-slate-600">No promotions qualify for this bill.</p>
-              )}
-              <div className="mt-3 space-y-3">
-                {offers.map((offer) => (
-                  <label
-                    key={offer.promotionId}
-                    className={`flex gap-3 rounded-xl border p-4 ${offer.eligible ? "border-teal-200" : "border-slate-200 bg-slate-50 text-slate-500"}`}
-                  >
-                    <input
-                      type="radio"
-                      name="promotion"
-                      value={offer.promotionId}
-                      checked={selected === offer.promotionId}
-                      onChange={() => setSelected(offer.promotionId)}
-                      disabled={!offer.eligible || busy}
-                    />
-                    <span>
-                      <span className="font-semibold">{offer.name}</span>
-                      {offer.isBestDeal && (
-                        <span className="ml-2 rounded-full bg-teal-100 px-2 py-1 text-xs font-semibold text-teal-900">
-                          Best Deal
+              {step === 1 && (
+                <>
+                  <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-4 py-2">
+                    <div className="py-2">
+                      <p className="font-semibold">
+                        {customer ? "Returning customer found" : "New customer"}
+                      </p>
+                      <p className="mt-1 text-sm text-slate-700">
+                        Phone ending in {phoneSuffix(draft.phone)}
+                      </p>
+                    </div>
+                    <button
+                      className={secondary}
+                      type="button"
+                      disabled={busy}
+                      onClick={() => closeWizard(true)}
+                    >
+                      Change phone
+                    </button>
+                  </div>
+                  {!customer && (
+                    <label className="mt-5 block text-sm font-semibold">
+                      Acquisition channel
+                      <span className="mt-1 block font-normal text-slate-600">
+                        Record how this customer first heard about the restaurant.
+                      </span>
+                      <select
+                        className={field}
+                        value={draft.channelId}
+                        required
+                        disabled={busy || channels.length === 0}
+                        onChange={(event) => persist({ ...draft, channelId: event.target.value })}
+                      >
+                        <option value="">Choose a channel</option>
+                        {channels.map(({ id, name }) => (
+                          <option key={id} value={id}>
+                            {name}
+                          </option>
+                        ))}
+                      </select>
+                      {channels.length === 0 && (
+                        <span className="mt-2 block text-red-800">
+                          No active acquisition channels are available.
                         </span>
                       )}
-                      <span className="mt-1 block text-sm">
-                        {offer.eligible
-                          ? `Save ${money(offer.discountCents)} · Final ${money(offer.finalBillCents)}`
-                          : offer.reasonCodes.join(", ").replaceAll("_", " ").toLowerCase()}
-                      </span>
-                    </span>
+                    </label>
+                  )}
+                </>
+              )}
+              {step === 2 && (
+                <div className="mt-4 grid gap-4 sm:grid-cols-2">
+                  <label className="text-sm font-semibold">
+                    Bill subtotal ($)
+                    <input
+                      className={field}
+                      inputMode="decimal"
+                      placeholder="45.00"
+                      value={draft.subtotal}
+                      readOnly={draft.redemptionPending}
+                      maxLength={16}
+                      onChange={(event) => editBill({ subtotal: event.target.value })}
+                      required
+                      disabled={busy}
+                    />
                   </label>
-                ))}
-              </div>
+                  <label className="text-sm font-semibold">
+                    Receipt number
+                    <input
+                      className={field}
+                      value={draft.receipt}
+                      readOnly={draft.redemptionPending}
+                      maxLength={80}
+                      onChange={(event) => editBill({ receipt: event.target.value })}
+                      required
+                      disabled={busy}
+                    />
+                  </label>
+                </div>
+              )}
+              {step === 3 && (
+                <fieldset className="mt-3" disabled={busy}>
+                  <legend className="sr-only">Eligible promotions</legend>
+                  <p className="text-sm text-slate-600">
+                    {busy
+                      ? "Checking current offers…"
+                      : offers
+                        ? "Choose one offer. Best Deal marks the highest savings."
+                        : "Refresh the offers to get a current quote."}
+                  </p>
+                  {offers && eligible.length === 0 && (
+                    <p className="mt-3 font-medium">No promotions qualify for this bill.</p>
+                  )}
+                  <div className="mt-3 space-y-2">
+                    {eligible.map((offer) => (
+                      <label
+                        key={offer.promotionId}
+                        className="grid cursor-pointer grid-cols-[auto_1fr_auto] items-center gap-3 rounded-md border border-slate-200 p-3 has-checked:border-teal-700 has-checked:bg-teal-50"
+                      >
+                        <input
+                          className="size-4 accent-teal-800"
+                          type="radio"
+                          name="promotion"
+                          value={offer.promotionId}
+                          checked={draft.selected === offer.promotionId}
+                          onChange={() => persist({ ...draft, selected: offer.promotionId })}
+                        />
+                        <span className="min-w-0 break-words">
+                          <span className="font-semibold">{offer.name}</span>
+                          {offer.isBestDeal && (
+                            <span className="ml-2 inline-block text-xs font-semibold text-teal-900">
+                              Best Deal
+                            </span>
+                          )}
+                          <span className="mt-0.5 block text-sm text-teal-900">
+                            Save {money(offer.discountCents)}
+                          </span>
+                        </span>
+                        <span className="text-right tabular-nums">
+                          <span className="block text-xs text-slate-600">Final</span>
+                          <strong>{money(offer.finalBillCents)}</strong>
+                        </span>
+                      </label>
+                    ))}
+                  </div>
+                  {!offers && !busy && (
+                    <button className={secondary} type="button" onClick={() => refreshOffers(true)}>
+                      Refresh offers
+                    </button>
+                  )}
+                </fieldset>
+              )}
+              {step === 4 && selectedOffer && (
+                <dl className="mt-3 grid grid-cols-[minmax(0,1fr)_minmax(0,1.4fr)] gap-x-4 gap-y-2 rounded-md bg-slate-50 p-4 text-sm tabular-nums sm:p-5">
+                  <dt className="text-slate-600">Customer phone</dt>
+                  <dd className="text-right">Ending in {phoneSuffix(draft.phone)}</dd>
+                  <dt className="text-slate-600">Branch</dt>
+                  <dd className="break-words text-right">{branchName}</dd>
+                  <dt className="text-slate-600">Receipt number</dt>
+                  <dd className="break-words text-right">{draft.receipt.trim()}</dd>
+                  <dt className="text-slate-600">Bill subtotal</dt>
+                  <dd className="text-right">{money(parseSubtotalCents(draft.subtotal)!)}</dd>
+                  <dt className="text-slate-600">Promotion</dt>
+                  <dd className="break-words text-right">{selectedOffer.name}</dd>
+                  <dt className="text-slate-600">Discount</dt>
+                  <dd className="text-right text-teal-900">
+                    −{money(selectedOffer.discountCents)}
+                  </dd>
+                  <dt className="mt-2 self-center font-semibold">Final amount</dt>
+                  <dd className="mt-2 text-right text-2xl font-semibold">
+                    {money(selectedOffer.finalBillCents)}
+                  </dd>
+                </dl>
+              )}
+              {error && (
+                <p role="alert" className="mt-4 text-sm font-medium text-red-800">
+                  {error}
+                </p>
+              )}
+            </form>
+
+            <footer className="flex flex-wrap items-center justify-between gap-x-3 gap-y-1 border-t border-slate-200 px-4 py-3 sm:px-7">
               <button
-                className={`${button} mt-5`}
-                disabled={busy || !selected}
-                onClick={redeem}
                 type="button"
+                className={secondary + " pl-0 text-sm"}
+                disabled={busy}
+                onClick={() => setAlert("discard")}
               >
-                Confirm one redemption
+                Start over
               </button>
-              <p className="mt-2 text-xs text-slate-500">
-                Eligibility and receipt uniqueness are checked again when you confirm.
-              </p>
+              {!draft.redemptionPending && (
+                <div className="ml-auto flex items-center gap-1 sm:gap-2">
+                  {step > 1 && (
+                    <button
+                      type="button"
+                      className={secondary}
+                      disabled={busy}
+                      onClick={() => goTo((step - 1) as CheckoutStep)}
+                    >
+                      Back
+                    </button>
+                  )}
+                  {step === 4 ? (
+                    <button
+                      type="button"
+                      className={primary}
+                      disabled={busy || !selectedOffer}
+                      onClick={redeem}
+                    >
+                      {busy ? "Confirming…" : "Confirm redemption"}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      form="checkout-step-form"
+                      className={primary}
+                      disabled={
+                        busy ||
+                        (step === 3 && !selectedOffer) ||
+                        (step === 1 && !customer && channels.length === 0)
+                      }
+                    >
+                      {step === 1
+                        ? customer
+                          ? "Continue to bill"
+                          : busy
+                            ? "Creating…"
+                            : "Create customer"
+                        : step === 2
+                          ? "Show offers"
+                          : "Review redemption"}
+                    </button>
+                  )}
+                </div>
+              )}
+            </footer>
+            <div role="status" className={toastStyle}>
+              {open && toastContent}
             </div>
-          )}
-        </section>
-      )}
+          </div>
+        )}
+      </CheckoutDialog>
+
+      <CheckoutDialog
+        open={alert !== null}
+        alert
+        labelledBy="checkout-alert-title"
+        describedBy="checkout-alert-description"
+        onDismiss={closeAlert}
+        className={styles.errorDialog}
+      >
+        {alert && (
+          <div className="p-5 sm:p-6">
+            <h2 id="checkout-alert-title" className="text-xl font-semibold">
+              {alert === "discard" ? "Start a new checkout?" : alert.title}
+            </h2>
+            <div
+              id="checkout-alert-description"
+              className="mt-2 space-y-2 text-sm leading-6 text-slate-700"
+            >
+              {alert === "discard" ? (
+                <p>
+                  {draft?.redemptionPending
+                    ? "Confirm that a manager checked this receipt before clearing the saved checkout fields."
+                    : "This will clear the saved checkout fields."}
+                </p>
+              ) : (
+                alert.messages.map((message) => <p key={message}>{message}</p>)
+              )}
+            </div>
+            <div className="mt-5 flex flex-wrap justify-end gap-2">
+              <button type="button" className={secondary} onClick={closeAlert}>
+                {alert === "discard" ? "Keep checkout" : "Close"}
+              </button>
+              <button
+                type="button"
+                className={primary}
+                onClick={() => {
+                  closeAlert();
+                  if (alert === "discard") resetCheckout();
+                  else if (alert.target === 3) refreshOffers(true);
+                }}
+              >
+                {alert === "discard"
+                  ? draft?.redemptionPending
+                    ? "Receipt checked. Start over"
+                    : "Clear draft and start over"
+                  : alert.action}
+              </button>
+            </div>
+          </div>
+        )}
+      </CheckoutDialog>
     </div>
   );
 }

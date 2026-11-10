@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { money, parseSubtotalCents } from "./checkout-input";
+import { isValidReceipt, money, parseSubtotalCents } from "./checkout-input";
 
 describe("checkout money input", () => {
   it.each([
@@ -19,5 +19,15 @@ describe("checkout money input", () => {
 
   it("formats integer cents for the receipt summary", () => {
     expect(money(1234)).toBe("$12.34");
+  });
+});
+
+describe("receipt input", () => {
+  it.each([" AB  42 ", "R-1.2_3/4", "收据-12"])("accepts %s", (value) => {
+    expect(isValidReceipt(value)).toBe(true);
+  });
+
+  it.each(["", " -1", "a#b", "A\nB", "X".repeat(81)])("rejects %s", (value) => {
+    expect(isValidReceipt(value)).toBe(false);
   });
 });

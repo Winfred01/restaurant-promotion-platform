@@ -4,6 +4,7 @@ import { redirect } from "next/navigation";
 import { signOut } from "@/auth";
 import { getCurrentEmployeeSession } from "@/server/auth/session";
 import { listAccessibleBranches } from "@/server/workspace/access";
+import { SessionTransitionForm } from "@/app/session-transition-form";
 
 export default async function WorkspaceSelectionPage() {
   const session = await getCurrentEmployeeSession();
@@ -44,7 +45,7 @@ export default async function WorkspaceSelectionPage() {
           No active branch is available for this employee. Contact an Owner for access.
         </p>
       )}
-      <form
+      <SessionTransitionForm
         action={async () => {
           "use server";
           await signOut({ redirectTo: session.user.demoLeaseId ? "/demo" : "/login" });
@@ -54,7 +55,7 @@ export default async function WorkspaceSelectionPage() {
         <button className="text-sm font-medium text-teal-800 underline" type="submit">
           Sign out
         </button>
-      </form>
+      </SessionTransitionForm>
     </main>
   );
 }

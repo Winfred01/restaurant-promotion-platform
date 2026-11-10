@@ -25,6 +25,23 @@ function createWorkflow(overrides: Partial<StaffCustomerWorkflow> = {}): StaffCu
 }
 
 describe("staff customer HTTP handlers", () => {
+  it("looks up checkout customers from a same-origin request body and returns only the id", async () => {
+    const workflow = createWorkflow();
+    const context = { organizationId: "org-1", branchId: "branch-1", phoneNumber: "+14165550123" };
+    const response = await createStaffCustomerRouteHandlers(workflow).POST(
+      new Request("http://localhost/api/staff/customers", {
+        method: "POST",
+        headers: { origin: "http://localhost" },
+        body: JSON.stringify({ action: "lookup", ...context })
+      })
+    );
+    expect(response.status).toBe(200);
+    expect(response.headers.get("cache-control")).toBe("no-store");
+    expect(workflow.lookup).toHaveBeenCalledWith(context);
+    expect(workflow.create).not.toHaveBeenCalled();
+    await expect(response.json()).resolves.toEqual({ customer: { id: "customer-1" } });
+  });
+
   it("passes validated lookup context to the authenticated workflow", async () => {
     const workflow = createWorkflow();
     const handlers = createStaffCustomerRouteHandlers(workflow);
@@ -91,13 +108,14 @@ describe("staff customer HTTP handlers", () => {
     expect(body).not.toContain(rawInput);
   });
 
-  it("rejects a cross-origin mutation before invoking the workflow", async () => {
+  it("rejects a cross-origin checkout request before invoking the workflow", async () => {
     const workflow = createWorkflow();
     const response = await createStaffCustomerRouteHandlers(workflow).POST(
       new Request("http://localhost/api/staff/customers", {
         method: "POST",
         headers: { "content-type": "application/json", origin: "https://attacker.example" },
         body: JSON.stringify({
+          action: "lookup",
           organizationId: "org-1",
           branchId: "branch-1",
           phoneNumber: "416-555-0123"
@@ -110,6 +128,7 @@ describe("staff customer HTTP handlers", () => {
       error: { code: "CSRF_VALIDATION_FAILED" }
     });
     expect(workflow.create).not.toHaveBeenCalled();
+    expect(workflow.lookup).not.toHaveBeenCalled();
   });
 
   it.each([

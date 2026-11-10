@@ -81,6 +81,16 @@ export function createStaffCustomerRouteHandlers(workflow: StaffCustomerWorkflow
       }
 
       try {
+        if (input && typeof input === "object") {
+          const { action, ...context } = input as Record<string, unknown>;
+          if (action === "lookup") {
+            const { customer } = await workflow.lookup(context);
+            return Response.json(
+              { customer: customer ? { id: customer.id } : null },
+              { headers: { "cache-control": "no-store" } }
+            );
+          }
+        }
         const result = await workflow.create(input);
         return Response.json(result, { status: result.isNewCustomer ? 201 : 200 });
       } catch (error) {

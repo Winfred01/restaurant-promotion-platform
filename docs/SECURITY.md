@@ -46,6 +46,16 @@ Run the operator-only counter-prune command daily. Never expose it as an HTTP ro
 
 Authenticated staff lookup may reveal customer records only within authorized organization/branch. Public QR claim must use generic messages.
 
+## Staff checkout drafts
+
+Unsubmitted checkout fields are stored in `sessionStorage` under a versioned key scoped to the authorized organization, branch, and employee. A draft expires 30 minutes after its last save. Checkout clears the active form and stored draft at expiry while the page stays open, and removes expired, malformed and unsupported versions on load. Closing the dialog, reloading or switching branches in the same tab can preserve a valid draft for its original scope. The app clears all checkout drafts in the current tab when an employee signs out, reaches employee login, or starts a new guided demo session. Unrelated session storage is preserved.
+
+The normalized phone number is temporarily present so checkout can repeat authorized lookup after a reload, including for a customer who has yet to be created. The wizard sends it in a same-origin lookup body instead of a URL and receives only the matching customer ID. The legacy GET handler remains for compatibility. Request body logging should remain disabled at the gateway. Drafts contain the workflow step, acquisition channel choice, subtotal, receipt, selected promotion identifier, and any pending outcome flag. They omit customer records, quoted prices, authentication material, and stored request payloads.
+
+An ordinary draft restore repeats customer lookup and refreshes any required quote. Customer creation and redemption require an explicit employee action. Checkout records a pending outcome in tab storage before sending a redemption. If tab storage is blocked, the bill stays editable and confirmation pauses until the recovery draft can be saved. A verified success clears the draft, and a recognized server rejection returns to the existing correction flow. On a timeout, disconnect, unexpected response or reload during the request, the receipt remains visible in a read-only recovery state. Staff ask an authorized manager to verify it in the same branch's redemption history before acknowledging the check and starting over. Receipt uniqueness still applies after restart, expiry or sign-out.
+
+Ending the tab session normally clears its storage. Session restore or tab duplication can retain or copy it, and cleanup affects only the current tab. Data can remain physically present until that tab next opens checkout or login, signs out, or its storage is cleared. Same-origin scripts and people with browser access can read that storage. Employees on shared terminals should sign out in each working tab.
+
 ## Rate Limits
 
 Public QR claims have shared PostgreSQL limits. Auth attempts, authenticated customer lookup, checkout, and void do not yet have application-level shared throttles. These paths must be protected and verified at the trusted deployment gateway before public release; see the M6 review below.

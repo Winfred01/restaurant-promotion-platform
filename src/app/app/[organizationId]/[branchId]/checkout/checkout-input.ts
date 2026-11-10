@@ -9,3 +9,8 @@ export function parseSubtotalCents(value: string): number | null {
 export function money(cents: number): string {
   return `$${(cents / 100).toFixed(2)}`;
 }
+
+export function isValidReceipt(value: string) {
+  const receipt = value.trim();
+  return receipt.length <= 80 && /^[\p{L}\p{N}][\p{L}\p{N} ._/-]*$/u.test(receipt);
+}

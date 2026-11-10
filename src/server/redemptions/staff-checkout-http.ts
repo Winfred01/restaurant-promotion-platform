@@ -4,14 +4,17 @@ import { AuthenticationRequiredError } from "@/server/auth/session";
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
 import { PromotionEligibilityUnavailableError } from "@/server/promotions/eligibility";
 import {
+  CheckoutContextChangedError,
+  PromotionUnavailableError,
+  ReceiptAlreadyRedeemedError,
   RedemptionConflictError,
   RedemptionIneligibleError,
   RedemptionUnavailableError
 } from "./checkout";
 import type { StaffCheckoutWorkflow } from "./staff-checkout";
 
-function failure(status: number, code: string, message: string) {
-  return Response.json({ error: { code, message } }, { status });
+function failure(status: number, code: string, message: string, reasonCodes?: readonly string[]) {
+  return Response.json({ error: { code, message, reasonCodes } }, { status });
 }
 
 function responseForError(error: unknown) {
@@ -19,6 +22,16 @@ function responseForError(error: unknown) {
   if (error instanceof AuthorizationDeniedError) return failure(403, error.code, error.message);
   if (error instanceof ZodError)
     return failure(400, "INVALID_REQUEST", "Check the checkout fields.");
+  if (error instanceof ReceiptAlreadyRedeemedError)
+    return failure(409, "RECEIPT_ALREADY_REDEEMED", "This receipt is already used in this branch.");
+  if (error instanceof PromotionUnavailableError)
+    return failure(
+      409,
+      "PROMOTION_UNAVAILABLE",
+      "This promotion is unavailable. Refresh the quote."
+    );
+  if (error instanceof CheckoutContextChangedError)
+    return failure(409, "CHECKOUT_CONTEXT_CHANGED", "Checkout details changed. Refresh the quote.");
   if (
     error instanceof PromotionEligibilityUnavailableError ||
     error instanceof RedemptionUnavailableError
@@ -32,7 +45,8 @@ function responseForError(error: unknown) {
     return failure(
       409,
       "PROMOTION_INELIGIBLE",
-      "This promotion is no longer eligible. Refresh the quote."
+      "This promotion is no longer eligible. Refresh the quote.",
+      error.reasonCodes
     );
   if (error instanceof RedemptionConflictError)
     return failure(409, "REDEMPTION_CONFLICT", error.message);

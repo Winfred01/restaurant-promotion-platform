@@ -12,8 +12,10 @@ import { AuthorizationDeniedError } from "@/server/authorization/guard";
 import { createPromotion, transitionPromotionStatus } from "@/server/promotions/lifecycle";
 import { createTenantIsolationHarness } from "@/test-support/tenant-isolation";
 import {
+  CheckoutContextChangedError,
   createCheckoutRedemptionService,
   normalizeReceiptNumber,
+  ReceiptAlreadyRedeemedError,
   RedemptionConflictError,
   RedemptionIneligibleError,
   RedemptionUnavailableError
@@ -306,10 +308,43 @@ describeWithLocalDatabase("checkout redemption transaction", () => {
     } satisfies Partial<RedemptionIneligibleError>);
     await expect(
       service.create({ ...input, customerId: secondCustomer.id, receiptNumber: "ab  42" })
-    ).rejects.toBeInstanceOf(RedemptionConflictError);
+    ).rejects.toBeInstanceOf(ReceiptAlreadyRedeemedError);
     await expect(
       db.redemption.count({ where: { organizationId: scope.organization.id } })
     ).resolves.toBe(1);
+  });
+
+  it("checks the confirmed discount against the transaction price before writing", async () => {
+    const scope = await harness.createTenantScope();
+    const customer = await harness.createCustomer(scope.organization);
+    const promotion = await activePromotion({
+      organizationId: scope.organization.id,
+      userId: scope.user.id,
+      name: "Updated offer"
+    });
+    const input = {
+      organizationId: scope.organization.id,
+      actorUserId: scope.user.id,
+      branchId: scope.branch.id,
+      customerId: customer.id,
+      promotionId: promotion.id,
+      receiptNumber: "CHANGED-PRICE-1",
+      billSubtotalCents: 2_000
+    };
+    await expect(service.create({ ...input, expectedDiscountCents: 1 })).rejects.toBeInstanceOf(
+      CheckoutContextChangedError
+    );
+    await expect(
+      db.redemption.count({ where: { organizationId: input.organizationId } })
+    ).resolves.toBe(0);
+    await expect(
+      db.auditLog.count({
+        where: { organizationId: input.organizationId, action: "REDEMPTION_CREATED" }
+      })
+    ).resolves.toBe(0);
+    await expect(
+      service.create({ ...input, expectedDiscountCents: promotion.discountCents! })
+    ).resolves.toMatchObject({ receiptNumber: input.receiptNumber });
   });
 
   it("allows exactly one concurrent duplicate redemption and one audit", async () => {

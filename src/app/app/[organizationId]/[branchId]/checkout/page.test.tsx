@@ -4,6 +4,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   session: vi.fn(),
   authorize: vi.fn(),
+  branch: vi.fn(),
   channels: vi.fn(),
   redirect: vi.fn((path: string) => {
     throw new Error(`REDIRECT:${path}`);
@@ -19,7 +20,12 @@ vi.mock("@/server/authorization/guard", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/server/authorization/guard")>()),
   createPrismaAuthorizationGuard: () => ({ requireBranchPermission: mocks.authorize })
 }));
-vi.mock("@/server/db", () => ({ prisma: { acquisitionChannel: { findMany: mocks.channels } } }));
+vi.mock("@/server/db", () => ({
+  prisma: {
+    acquisitionChannel: { findMany: mocks.channels },
+    branch: { findFirst: mocks.branch }
+  }
+}));
 
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
 import StaffCheckoutPage from "./page";
@@ -30,6 +36,7 @@ describe("Staff checkout page", () => {
   beforeEach(() => {
     vi.resetAllMocks();
     mocks.session.mockResolvedValue({ user: { id: "employee-a" } });
+    mocks.branch.mockResolvedValue({ name: "Downtown" });
     mocks.channels.mockResolvedValue([{ id: "channel-a", name: "Walk-in" }]);
   });
 
@@ -37,18 +44,24 @@ describe("Staff checkout page", () => {
     mocks.session.mockResolvedValue(null);
     await expect(StaffCheckoutPage({ params })).rejects.toThrow("REDIRECT:/login");
     expect(mocks.channels).not.toHaveBeenCalled();
+    expect(mocks.branch).not.toHaveBeenCalled();
   });
 
   it("denies unauthorized branch access without loading channels", async () => {
     mocks.authorize.mockRejectedValue(new AuthorizationDeniedError());
     await expect(StaffCheckoutPage({ params })).rejects.toThrow("NOT_FOUND");
     expect(mocks.channels).not.toHaveBeenCalled();
+    expect(mocks.branch).not.toHaveBeenCalled();
   });
 
   it("renders the workflow with tenant-scoped channels after authorization", async () => {
     const html = renderToStaticMarkup(await StaffCheckoutPage({ params }));
     expect(html).toContain("Find customer");
-    expect(html).toContain("Best Deal");
+    expect(html).not.toContain("Bill subtotal");
+    expect(mocks.branch).toHaveBeenCalledWith({
+      where: { id: "branch-a", organizationId: "org-a", status: "ACTIVE" },
+      select: { name: true }
+    });
     expect(mocks.channels).toHaveBeenCalledWith(
       expect.objectContaining({ where: { organizationId: "org-a", status: "ACTIVE" } })
     );

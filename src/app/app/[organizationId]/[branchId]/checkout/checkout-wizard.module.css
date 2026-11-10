@@ -1,0 +1,54 @@
+.dialog,
+.errorDialog {
+  position: fixed;
+  inset: 0;
+  margin: auto;
+  width: min(48rem, calc(100% - 2rem));
+  max-height: calc(100dvh - 2rem);
+  padding: 0;
+  overflow: hidden;
+  border: 1px solid #e2e8f0;
+  border-radius: 0.75rem;
+  background: white;
+  color: #0f172a;
+  box-shadow: 0 18px 60px rgb(15 23 42 / 20%);
+}
+
+.dialog::backdrop {
+  background: rgb(15 23 42 / 55%);
+}
+
+.errorDialog {
+  width: min(30rem, calc(100% - 2rem));
+  overflow: auto;
+}
+
+.errorDialog::backdrop {
+  background: rgb(15 23 42 / 36%);
+}
+
+.layout {
+  display: grid;
+  grid-template-rows: auto minmax(0, 1fr) auto;
+  max-height: calc(100dvh - 2rem - 2px);
+}
+
+.content {
+  overflow: auto;
+  overscroll-behavior: contain;
+}
+
+:global(html):has(.dialog[open]) {
+  overflow: hidden;
+}
+
+@media (max-width: 639px) {
+  .dialog {
+    width: calc(100% - 1rem);
+    max-height: calc(100dvh - 1rem);
+  }
+
+  .layout {
+    max-height: calc(100dvh - 1rem - 2px);
+  }
+}

@@ -46,6 +46,14 @@ Run the operator-only counter-prune command daily. Never expose it as an HTTP ro
 
 Authenticated staff lookup may reveal customer records only within authorized organization/branch. Public QR claim must use generic messages.
 
+## Staff checkout drafts
+
+Unsubmitted checkout fields are stored in `sessionStorage` under a versioned key scoped to the authorized organization, branch, and employee. A draft expires 30 minutes after its last save. Checkout removes expired entries on load and at the active draft's expiry while the page stays open. Tab session storage is cleared when the browser ends that tab session. Browser session restore can retain it until the expiry check runs.
+
+The normalized phone number is temporarily present so checkout can repeat authorized lookup after a reload, including for a customer who has yet to be created. Drafts store the workflow step, acquisition channel choice, subtotal, receipt, and selected promotion identifier. They omit customer records, quoted prices, and authentication material. Draft storage is readable to scripts on this origin, so the shared-workstation sign-out and browser access controls still matter.
+
+Restoring a draft repeats customer lookup and refreshes any required offer quote. It never creates a customer or resubmits a redemption. A successful redemption response or explicit restart removes the scoped draft. If a request commits and the browser loses its response, the draft is kept for manual review. Server eligibility and receipt checks still govern the next attempt.
+
 ## Rate Limits
 
 Public QR claims have shared PostgreSQL limits. Auth attempts, authenticated customer lookup, checkout, and void do not yet have application-level shared throttles. These paths must be protected and verified at the trusted deployment gateway before public release; see the M6 review below.

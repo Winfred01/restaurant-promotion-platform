@@ -40,6 +40,7 @@ test("guided visitors receive separate tenants and mobile Staff access stays sco
   await second.page.getByRole("button", { name: "Find customer" }).click();
   await expect(second.page.getByText(/Returning customer found/)).toBeVisible();
   await expect(second.page.getByLabel("Acquisition channel")).toHaveCount(0);
+  await second.page.getByRole("button", { name: "Continue to bill" }).click();
   await second.page.getByLabel("Bill subtotal ($)").fill("40.00");
   await second.page.getByLabel("Receipt number").fill("E2E-MOBILE-01");
   await second.page.getByRole("button", { name: "Show offers" }).click();

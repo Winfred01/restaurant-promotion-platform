@@ -21,7 +21,8 @@ const quoteInput = context.extend({ billSubtotalCents: subtotal }).strict();
 const redeemInput = quoteInput
   .extend({
     promotionId: id,
-    receiptNumber: z.string().trim().min(1).max(80)
+    receiptNumber: z.string().trim().min(1).max(80),
+    expectedDiscountCents: z.number().int().nonnegative().max(2_147_483_647).optional()
   })
   .strict();
 

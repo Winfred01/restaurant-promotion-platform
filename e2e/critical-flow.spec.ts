@@ -51,35 +51,74 @@ test("seeded Owner, Manager, and Staff complete the business loop with enforced 
   await staff.page.goto(`${branchPath}/manager/redemptions`);
   await expect(staff.page.getByRole("heading", { name: "404" })).toBeVisible();
   await staff.page.goto(`${branchPath}/checkout`);
+  const wizard = staff.page.getByRole("dialog", { name: "Promotion checkout" });
   await lookup(staff.page, "4165550198");
-  await expect(staff.page.getByText("New customer", { exact: true })).toBeVisible();
+  await expect(wizard.getByText("New customer", { exact: true })).toBeVisible();
   await staff.page.getByLabel("Acquisition channel").selectOption({ label: "Walk-in" });
   await staff.page.getByRole("button", { name: "Create customer" }).click();
-  await expect(staff.page.getByText(/New customer created/)).toBeVisible();
+  const customerToast = wizard.getByRole("status").filter({ hasText: "Customer created" });
+  await expect(customerToast).toHaveText("Customer created · phone ending in 0198");
+  await expect(customerToast).toBeHidden({ timeout: 2_500 });
+  await wizard.getByRole("button", { name: /Close and keep draft/ }).click();
   await lookup(staff.page, "4165550198");
-  await expect(staff.page.getByText(/Returning customer found/)).toBeVisible();
+  await wizard.getByRole("button", { name: /Confirm customer.*completed/ }).click();
+  await expect(wizard.getByText(/Returning customer found/)).toBeVisible();
+  await expect(wizard.getByText("Customer created", { exact: false })).toHaveCount(0);
   await expect(staff.page.getByLabel("Acquisition channel")).toHaveCount(0);
+  await wizard.getByRole("button", { name: "Continue to bill" }).click();
   await staff.page.getByLabel("Bill subtotal ($)").fill("40.00");
   await staff.page.getByLabel("Receipt number").fill("E2E-24-001");
   await staff.page.getByRole("button", { name: "Show offers" }).click();
   const best = staff.page.getByRole("radio", { name: /E2E twenty percent.*Best Deal/ });
   await expect(best).toBeEnabled();
   await best.check();
-  await staff.page.getByRole("button", { name: "Confirm one redemption" }).click();
+  await wizard.getByRole("button", { name: "Review redemption" }).click();
+  await expect(wizard.getByText("$32.00", { exact: true })).toBeVisible();
+  await wizard.getByRole("button", { name: "Confirm redemption", exact: true }).click();
   await expect(
     staff.page.getByRole("status").filter({ hasText: "Redemption completed" })
-  ).toContainText("$8.00 discount");
+  ).toBeVisible();
+  await expect(wizard).toBeHidden();
+  await expect(staff.page.getByLabel("Phone number")).toBeEmpty();
+  expect(
+    await staff.page.evaluate(() =>
+      Object.keys(sessionStorage).filter((key) => key.startsWith("staff-checkout:"))
+    )
+  ).toEqual([]);
+  await staff.page.reload();
+  await expect(staff.page.getByLabel("Phone number")).toBeEmpty();
+  await expect(wizard).toBeHidden();
 
   await lookup(staff.page, "4165550199");
   await staff.page.getByLabel("Acquisition channel").selectOption({ label: "Friend referral" });
   await staff.page.getByRole("button", { name: "Create customer" }).click();
   await staff.page.getByLabel("Bill subtotal ($)").fill("40.00");
+  await staff.page.getByLabel("Receipt number").fill("e2e-24-001");
   await staff.page.getByRole("button", { name: "Show offers" }).click();
   await staff.page.getByRole("radio", { name: /E2E twenty percent/ }).check();
-  await staff.page.getByRole("button", { name: "Confirm one redemption" }).click();
-  await expect(
-    staff.page.getByRole("alert").filter({ hasText: /receipt|already|conflict/i })
-  ).toBeVisible();
+  await wizard.getByRole("button", { name: "Review redemption" }).click();
+  await wizard.getByRole("button", { name: "Confirm redemption", exact: true }).click();
+  const duplicate = staff.page.getByRole("alertdialog", { name: "Receipt already used" });
+  await expect(duplicate).toContainText(
+    "This receipt number has already been used at this branch."
+  );
+  await duplicate.getByRole("button", { name: "Edit receipt" }).click();
+  await expect(wizard.getByLabel("Bill subtotal ($)")).toHaveValue("40.00");
+  await expect(wizard.getByLabel("Receipt number")).toHaveValue("e2e-24-001");
+  await wizard.getByLabel("Receipt number").fill("E2E-24-CORRECTED");
+  await wizard.getByRole("button", { name: "Show offers" }).click();
+  await expect(wizard.getByRole("radio", { name: /E2E twenty percent/ })).toBeChecked();
+  await wizard.getByRole("button", { name: "Review redemption" }).click();
+  await promotion.getByRole("button", { name: "Pause" }).click();
+  await expect(promotion).toContainText("PAUSED");
+  await wizard.getByRole("button", { name: "Confirm redemption", exact: true }).click();
+  const unavailable = staff.page.getByRole("alertdialog", { name: "Promotion unavailable" });
+  await expect(unavailable).toContainText("This promotion has been paused.");
+  await unavailable.getByRole("button", { name: "Refresh offers" }).click();
+  await expect(wizard.getByRole("radio", { name: /E2E twenty percent/ })).toBeHidden();
+  await expect(wizard.getByRole("button", { name: "Review redemption" })).toBeDisabled();
+  await wizard.getByRole("button", { name: /Enter bill.*completed/ }).click();
+  await expect(wizard.getByLabel("Receipt number")).toHaveValue("E2E-24-CORRECTED");
   await staff.context.close();
 
   await manager.page.goto(`${branchPath}/manager`);

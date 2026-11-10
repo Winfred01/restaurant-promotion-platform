@@ -30,23 +30,30 @@ export default async function StaffCheckoutPage({
     throw error;
   }
 
-  const channels = await prisma.acquisitionChannel.findMany({
-    where: { organizationId, status: "ACTIVE" },
-    select: { id: true, name: true },
-    orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
-  });
+  const [branch, channels] = await Promise.all([
+    prisma.branch.findFirst({
+      where: { id: branchId, organizationId, status: "ACTIVE" },
+      select: { name: true }
+    }),
+    prisma.acquisitionChannel.findMany({
+      where: { organizationId, status: "ACTIVE" },
+      select: { id: true, name: true },
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }]
+    })
+  ]);
+  if (!branch) notFound();
 
   return (
     <>
-      <p className="text-sm font-semibold uppercase tracking-widest text-teal-700">
-        Staff checkout
-      </p>
-      <h1 className="mt-3 text-3xl font-semibold text-slate-950">Redeem a promotion</h1>
-      <p className="mt-3 max-w-2xl text-slate-700">
-        Find the customer, enter the bill, compare eligible offers, then confirm one redemption.
-        Best Deal is a suggestion; the final choice is yours.
-      </p>
-      <CheckoutForm organizationId={organizationId} branchId={branchId} channels={channels} />
+      <h1 className="text-2xl font-semibold tracking-tight text-slate-950">Staff checkout</h1>
+      <CheckoutForm
+        key={JSON.stringify([organizationId, branchId, session.user.id])}
+        organizationId={organizationId}
+        branchId={branchId}
+        branchName={branch.name}
+        employeeId={session.user.id}
+        channels={channels}
+      />
     </>
   );
 }

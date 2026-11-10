@@ -2,7 +2,14 @@ import { describe, expect, it, vi } from "vitest";
 
 import { AuthenticationRequiredError } from "@/server/auth/session";
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
-import { RedemptionConflictError } from "./checkout";
+import { PromotionEligibilityReason } from "@/server/promotions/eligibility";
+import {
+  CheckoutContextChangedError,
+  PromotionUnavailableError,
+  ReceiptAlreadyRedeemedError,
+  RedemptionConflictError,
+  RedemptionIneligibleError
+} from "./checkout";
 import { createStaffCheckoutRouteHandler } from "./staff-checkout-http";
 import type { StaffCheckoutWorkflow } from "./staff-checkout";
 
@@ -59,6 +66,9 @@ describe("staff checkout HTTP", () => {
   it.each([
     [new AuthenticationRequiredError(), 401, "AUTHENTICATION_REQUIRED"],
     [new AuthorizationDeniedError(), 403, "AUTHORIZATION_DENIED"],
+    [new ReceiptAlreadyRedeemedError(), 409, "RECEIPT_ALREADY_REDEEMED"],
+    [new PromotionUnavailableError(), 409, "PROMOTION_UNAVAILABLE"],
+    [new CheckoutContextChangedError(), 409, "CHECKOUT_CONTEXT_CHANGED"],
     [new RedemptionConflictError(), 409, "REDEMPTION_CONFLICT"]
   ])("maps safe failures without exposing private details", async (error, status, code) => {
     const service = workflow();
@@ -66,5 +76,23 @@ describe("staff checkout HTTP", () => {
     const response = await createStaffCheckoutRouteHandler(service)(request({ action: "redeem" }));
     expect(response.status).toBe(status);
     await expect(response.json()).resolves.toMatchObject({ error: { code } });
+  });
+
+  it("exposes only verified eligibility reasons and a safe public message", async () => {
+    const service = workflow();
+    const reasonCodes = [
+      PromotionEligibilityReason.STATUS_PAUSED,
+      PromotionEligibilityReason.ALREADY_REDEEMED
+    ];
+    vi.mocked(service.redeem).mockRejectedValue(new RedemptionIneligibleError(reasonCodes));
+    const response = await createStaffCheckoutRouteHandler(service)(request({ action: "redeem" }));
+    expect(response.status).toBe(409);
+    await expect(response.json()).resolves.toEqual({
+      error: {
+        code: "PROMOTION_INELIGIBLE",
+        message: "This promotion is no longer eligible. Refresh the quote.",
+        reasonCodes
+      }
+    });
   });
 });

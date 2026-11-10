@@ -31,7 +31,8 @@ const checkoutInputSchema = z
       .min(1)
       .max(80)
       .regex(/^[\p{L}\p{N}][\p{L}\p{N} ._/-]*$/u),
-    billSubtotalCents: z.number().int().positive().max(2_147_483_647)
+    billSubtotalCents: z.number().int().positive().max(2_147_483_647),
+    expectedDiscountCents: z.number().int().nonnegative().max(2_147_483_647).optional()
   })
   .strict();
 
@@ -55,12 +56,18 @@ export class RedemptionIneligibleError extends Error {
   }
 }
 
+export class PromotionUnavailableError extends RedemptionUnavailableError {}
+
+export class CheckoutContextChangedError extends RedemptionUnavailableError {}
+
 export class RedemptionConflictError extends Error {
   constructor() {
-    super("This receipt or promotion was already redeemed, or checkout context changed.");
+    super("The exact cause could not be verified. Refresh the quote and try again.");
     this.name = "RedemptionConflictError";
   }
 }
+
+export class ReceiptAlreadyRedeemedError extends RedemptionConflictError {}
 
 function isTransactionConflict(error: unknown) {
   return (
@@ -145,21 +152,22 @@ export function createCheckoutRedemptionService(
               })
             ]);
 
-            if (!customer || !promotion || (parsedInput.claimId && !claim)) {
-              throw new RedemptionUnavailableError();
+            if (!customer || (parsedInput.claimId && !claim)) {
+              throw new CheckoutContextChangedError();
             }
+            if (!promotion) throw new PromotionUnavailableError();
             if (claim && claim.status !== PromotionClaimStatus.CLAIMED) {
-              throw new RedemptionConflictError();
+              throw new CheckoutContextChangedError();
             }
             if (
               claim?.promotionCodeId &&
               parsedInput.promotionCodeId &&
               claim.promotionCodeId !== parsedInput.promotionCodeId
             ) {
-              throw new RedemptionUnavailableError();
+              throw new CheckoutContextChangedError();
             }
             if (priorReceipt) {
-              throw new RedemptionConflictError();
+              throw new ReceiptAlreadyRedeemedError();
             }
 
             const promotionCodeId = parsedInput.promotionCodeId ?? claim?.promotionCodeId ?? null;
@@ -200,6 +208,12 @@ export function createCheckoutRedemptionService(
             if (!eligibility.eligible) {
               throw new RedemptionIneligibleError(eligibility.reasonCodes);
             }
+            if (
+              parsedInput.expectedDiscountCents !== undefined &&
+              parsedInput.expectedDiscountCents !== eligibility.discountCents
+            ) {
+              throw new CheckoutContextChangedError();
+            }
 
             const redemption = await transaction.redemption.create({
               data: {
@@ -229,7 +243,7 @@ export function createCheckoutRedemptionService(
                 data: { status: PromotionClaimStatus.REDEEMED }
               });
               if (updated.count !== 1) {
-                throw new RedemptionConflictError();
+                throw new CheckoutContextChangedError();
               }
             }
 

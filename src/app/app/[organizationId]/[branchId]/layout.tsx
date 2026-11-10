@@ -11,6 +11,7 @@ import {
 import { Permission } from "@/server/authorization/permissions";
 import { prisma } from "@/server/db";
 import { workspaceLinks } from "@/server/workspace/navigation";
+import { SessionTransitionForm } from "@/app/session-transition-form";
 import { WorkspaceFrame, WorkspaceNavigationLink } from "./workspace-frame";
 
 type WorkspaceParams = Promise<{ organizationId: string; branchId: string }>;
@@ -66,7 +67,7 @@ export default async function BranchLayout({
           <Link className="mt-8 block text-sm text-teal-800 underline" href="/app">
             Change branch
           </Link>
-          <form
+          <SessionTransitionForm
             action={async () => {
               "use server";
               await signOut({ redirectTo: session.user.demoLeaseId ? "/demo" : "/login" });
@@ -76,7 +77,7 @@ export default async function BranchLayout({
             <button className="text-sm text-slate-600 underline" type="submit">
               Sign out
             </button>
-          </form>
+          </SessionTransitionForm>
         </>
       }
     >

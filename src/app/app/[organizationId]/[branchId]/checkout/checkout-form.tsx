@@ -34,7 +34,7 @@ const steps = [
   { number: 4, title: "Confirm redemption", short: "Confirm" }
 ] as const;
 
-type Alert = ReturnType<typeof redemptionIssue> | "discard";
+type Alert = NonNullable<ReturnType<typeof redemptionIssue>> | "discard";
 
 function phoneSuffix(value: string) {
   return value.replace(/\D/g, "").slice(-4);
@@ -118,10 +118,10 @@ export function CheckoutForm({
   }
 
   async function lookupCustomer(number: string, signal: AbortSignal) {
-    const query = new URLSearchParams({ organizationId, branchId, phoneNumber: number });
     const result = await checkoutRequest<{ customer: Customer | null }>(
-      "/api/staff/customers?" + query,
-      signal
+      "/api/staff/customers",
+      signal,
+      { action: "lookup", organizationId, branchId, phoneNumber: number }
     );
     return result.customer;
   }
@@ -151,6 +151,13 @@ export function CheckoutForm({
   }
 
   async function openCheckout(number: string, saved: CheckoutDraft | null, signal: AbortSignal) {
+    if (saved?.redemptionPending) {
+      setDraft({ ...saved, step: 2 });
+      setOffers(null);
+      setOpen(true);
+      setNotice("");
+      return;
+    }
     const found = await lookupCustomer(number, signal);
     const samePhone = saved?.phone === number;
     const next: CheckoutDraft = {
@@ -204,25 +211,17 @@ export function CheckoutForm({
     };
   }, [key]);
 
+  const expireDraft = useEffectEvent(() => {
+    if (request.current) return;
+    resetCheckout();
+    setNotice("The checkout draft expired.");
+  });
+
   useEffect(() => {
     if (!draft) return;
-    const timer = setTimeout(
-      () => {
-        try {
-          readCheckoutDraft(sessionStorage, key);
-        } catch {
-          // Storage can be disabled for this tab.
-        }
-        if (!open && !request.current) {
-          setDraft(null);
-          setPhone((value) => (value === draft.phone ? "" : value));
-          setNotice("The checkout draft expired.");
-        }
-      },
-      Math.max(0, draft.expiresAt - Date.now())
-    );
+    const timer = setTimeout(() => expireDraft(), Math.max(0, draft.expiresAt - Date.now()));
     return () => clearTimeout(timer);
-  }, [draft, key, open]);
+  }, [draft, busy]);
 
   useEffect(() => {
     if (open && !alert) stepHeading.current?.focus();
@@ -234,22 +233,22 @@ export function CheckoutForm({
 
   function findCustomer(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
+    const saved = draft && draft.expiresAt > Date.now() ? draft : null;
     let number: string;
     try {
-      number = normalizePhoneNumber(phone);
+      number = saved?.redemptionPending ? saved.phone : normalizePhoneNumber(phone);
     } catch {
       setError("Enter a valid phone number, including the country code for international numbers.");
       return;
     }
     void run(
-      (signal) =>
-        openCheckout(number, draft && draft.expiresAt > Date.now() ? draft : null, signal),
+      (signal) => openCheckout(number, saved, signal),
       (cause) => setError(errorMessage(cause, "Customer lookup failed. Try again."))
     );
   }
 
   function goTo(nextStep: CheckoutStep) {
-    if (!draft) return;
+    if (!draft || draft.redemptionPending) return;
     setError("");
     persist({ ...draft, step: nextStep });
   }
@@ -260,11 +259,13 @@ export function CheckoutForm({
     setPhone(draft.phone);
     setError("");
     setNotice(
-      changePhone
-        ? "Enter a different phone number to change the customer and keep the bill details."
-        : saved
-          ? "Draft saved in this tab for 30 minutes. Find the customer again to resume."
-          : "Draft kept while this page is open. Browser storage is unavailable."
+      draft.redemptionPending
+        ? "Redemption outcome unknown. Reopen checkout to review the receipt."
+        : changePhone
+          ? "Enter a different phone number to change the customer and keep the bill details."
+          : saved
+            ? "Draft saved in this tab for 30 minutes. Find the customer again to resume."
+            : "Draft kept while this page is open. Browser storage is unavailable."
     );
     returnToPhone.current = true;
     setOpen(false);
@@ -357,21 +358,43 @@ export function CheckoutForm({
   }
 
   function editBill(update: { subtotal: string } | { receipt: string }) {
-    if (!draft) return;
+    if (!draft || draft.redemptionPending) return;
     setOffers(null);
     setError("");
     persist({ ...draft, ...update });
   }
 
   function redeem() {
-    if (!draft || draft.step !== 4 || !customer || !selectedOffer || alert) return;
+    if (
+      !draft ||
+      draft.redemptionPending ||
+      draft.step !== 4 ||
+      !customer ||
+      !selectedOffer ||
+      alert ||
+      request.current
+    )
+      return;
     const billSubtotalCents = parseSubtotalCents(draft.subtotal);
     if (billSubtotalCents === null || !isValidReceipt(draft.receipt)) return;
+    const attempted = {
+      ...draft,
+      step: 2,
+      redemptionPending: true,
+      expiresAt: Date.now() + checkoutDraftLifetimeMs
+    } as const;
+    // Record uncertainty before the POST so reloads cannot reopen a ready-to-submit checkout.
+    try {
+      sessionStorage.setItem(key, JSON.stringify(attempted));
+    } catch {
+      setError("Enable tab storage before confirming. Checkout could not save a recovery draft.");
+      return;
+    }
     void run(
       async (signal) => {
         const result = await checkoutRequest<{ id: string }>(
           "/api/staff/checkout",
-          signal,
+          AbortSignal.any([signal, AbortSignal.timeout(15_000)]),
           {
             action: "redeem",
             organizationId,
@@ -391,15 +414,15 @@ export function CheckoutForm({
       (cause) => {
         const issue = redemptionIssue(cause);
         setOffers(null);
-        persist({ ...draft, step: issue.target });
-        setAlert(issue);
+        persist(issue ? { ...draft, step: issue.target } : attempted);
+        if (issue) setAlert(issue);
       }
     );
   }
 
   function next(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
-    if (request.current || alert) return;
+    if (request.current || alert || draft?.redemptionPending) return;
     if (step === 1) confirmCustomer();
     if (step === 2) refreshOffers();
     if (step === 3 && selectedOffer) goTo(4);
@@ -526,7 +549,7 @@ export function CheckoutForm({
                     ].join(" ");
                     return (
                       <li key={number} aria-current={current ? "step" : undefined}>
-                        {done ? (
+                        {done && !draft.redemptionPending ? (
                           <button
                             type="button"
                             disabled={busy}
@@ -554,6 +577,18 @@ export function CheckoutForm({
                 <span className="sr-only">Step {step} of 4. </span>
                 {steps[step - 1].title}
               </h3>
+              {draft.redemptionPending && (
+                <div
+                  role="alert"
+                  className="mt-4 rounded-md bg-amber-50 p-3 text-sm text-amber-950"
+                >
+                  <p className="font-semibold">Redemption outcome unknown</p>
+                  <p className="mt-1">
+                    This redemption may have completed. Ask a manager to check this receipt in this
+                    branch’s redemption history before starting over.
+                  </p>
+                </div>
+              )}
               {step === 1 && (
                 <>
                   <div className="mt-3 flex flex-wrap items-center justify-between gap-2 rounded-md bg-slate-50 px-4 py-2">
@@ -612,6 +647,7 @@ export function CheckoutForm({
                       inputMode="decimal"
                       placeholder="45.00"
                       value={draft.subtotal}
+                      readOnly={draft.redemptionPending}
                       maxLength={16}
                       onChange={(event) => editBill({ subtotal: event.target.value })}
                       required
@@ -623,6 +659,7 @@ export function CheckoutForm({
                     <input
                       className={field}
                       value={draft.receipt}
+                      readOnly={draft.redemptionPending}
                       maxLength={80}
                       onChange={(event) => editBill({ receipt: event.target.value })}
                       required
@@ -721,49 +758,51 @@ export function CheckoutForm({
               >
                 Start over
               </button>
-              <div className="ml-auto flex items-center gap-1 sm:gap-2">
-                {step > 1 && (
-                  <button
-                    type="button"
-                    className={secondary}
-                    disabled={busy}
-                    onClick={() => goTo((step - 1) as CheckoutStep)}
-                  >
-                    Back
-                  </button>
-                )}
-                {step === 4 ? (
-                  <button
-                    type="button"
-                    className={primary}
-                    disabled={busy || !selectedOffer}
-                    onClick={redeem}
-                  >
-                    {busy ? "Confirming…" : "Confirm redemption"}
-                  </button>
-                ) : (
-                  <button
-                    type="submit"
-                    form="checkout-step-form"
-                    className={primary}
-                    disabled={
-                      busy ||
-                      (step === 3 && !selectedOffer) ||
-                      (step === 1 && !customer && channels.length === 0)
-                    }
-                  >
-                    {step === 1
-                      ? customer
-                        ? "Continue to bill"
-                        : busy
-                          ? "Creating…"
-                          : "Create customer"
-                      : step === 2
-                        ? "Show offers"
-                        : "Review redemption"}
-                  </button>
-                )}
-              </div>
+              {!draft.redemptionPending && (
+                <div className="ml-auto flex items-center gap-1 sm:gap-2">
+                  {step > 1 && (
+                    <button
+                      type="button"
+                      className={secondary}
+                      disabled={busy}
+                      onClick={() => goTo((step - 1) as CheckoutStep)}
+                    >
+                      Back
+                    </button>
+                  )}
+                  {step === 4 ? (
+                    <button
+                      type="button"
+                      className={primary}
+                      disabled={busy || !selectedOffer}
+                      onClick={redeem}
+                    >
+                      {busy ? "Confirming…" : "Confirm redemption"}
+                    </button>
+                  ) : (
+                    <button
+                      type="submit"
+                      form="checkout-step-form"
+                      className={primary}
+                      disabled={
+                        busy ||
+                        (step === 3 && !selectedOffer) ||
+                        (step === 1 && !customer && channels.length === 0)
+                      }
+                    >
+                      {step === 1
+                        ? customer
+                          ? "Continue to bill"
+                          : busy
+                            ? "Creating…"
+                            : "Create customer"
+                        : step === 2
+                          ? "Show offers"
+                          : "Review redemption"}
+                    </button>
+                  )}
+                </div>
+              )}
             </footer>
             <div role="status" className={toastStyle}>
               {open && toastContent}
@@ -790,7 +829,11 @@ export function CheckoutForm({
               className="mt-2 space-y-2 text-sm leading-6 text-slate-700"
             >
               {alert === "discard" ? (
-                <p>This will clear the saved checkout fields.</p>
+                <p>
+                  {draft?.redemptionPending
+                    ? "Confirm that a manager checked this receipt before clearing the saved checkout fields."
+                    : "This will clear the saved checkout fields."}
+                </p>
               ) : (
                 alert.messages.map((message) => <p key={message}>{message}</p>)
               )}
@@ -808,7 +851,11 @@ export function CheckoutForm({
                   else if (alert.target === 3) refreshOffers(true);
                 }}
               >
-                {alert === "discard" ? "Clear draft and start over" : alert.action}
+                {alert === "discard"
+                  ? draft?.redemptionPending
+                    ? "Receipt checked. Start over"
+                    : "Clear draft and start over"
+                  : alert.action}
               </button>
             </div>
           </div>

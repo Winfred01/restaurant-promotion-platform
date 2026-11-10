@@ -50,10 +50,21 @@ describe("checkout draft", () => {
     const other = checkoutDraftKey("org", "riverside", "staff");
     storage.setItem(key, JSON.stringify(draft));
     storage.setItem(other, "invalid json");
+    storage.setItem("staff-checkout:v0:previous", JSON.stringify(draft));
     storage.setItem("unrelated", "keep");
     expect(readCheckoutDraft(storage, key, draft.expiresAt)).toBeNull();
     expect(storage.getItem(key)).toBeNull();
     expect(storage.getItem(other)).toBeNull();
+    expect(storage.getItem("staff-checkout:v0:previous")).toBeNull();
     expect(storage.getItem("unrelated")).toBe("keep");
+  });
+
+  it("restores an unconfirmed attempt only within its draft lifetime", () => {
+    const storage = sessionStorageFixture();
+    const attempted = { ...draft, redemptionPending: true };
+    storage.setItem(key, JSON.stringify(attempted));
+    expect(readCheckoutDraft(storage, key, 100)).toEqual(attempted);
+    expect(readCheckoutDraft(storage, key, attempted.expiresAt)).toBeNull();
+    expect(storage.getItem(key)).toBeNull();
   });
 });

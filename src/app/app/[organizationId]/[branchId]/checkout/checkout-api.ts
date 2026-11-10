@@ -7,7 +7,8 @@ export class CheckoutRequestError extends Error {
   constructor(
     readonly code: string,
     message: string,
-    readonly reasonCodes: readonly string[] = []
+    readonly reasonCodes: readonly string[] = [],
+    readonly status?: number
   ) {
     super(message);
   }
@@ -34,7 +35,8 @@ export async function checkoutRequest<T>(
     throw new CheckoutRequestError(
       body?.error?.code ?? "INTERNAL_ERROR",
       body?.error?.message ?? "The request could not be completed.",
-      Array.isArray(body?.error?.reasonCodes) ? body.error.reasonCodes : []
+      Array.isArray(body?.error?.reasonCodes) ? body.error.reasonCodes : [],
+      response.status
     );
   }
   if (!body || (expectedStatus !== undefined && response.status !== expectedStatus)) {
@@ -58,10 +60,10 @@ const promotionReasons: Record<string, string> = {
 };
 
 export function redemptionIssue(error: unknown) {
-  const code = error instanceof CheckoutRequestError ? error.code : "INTERNAL_ERROR";
+  if (!(error instanceof CheckoutRequestError)) return null;
 
-  switch (code) {
-    case "RECEIPT_ALREADY_REDEEMED":
+  switch (error.status + ":" + error.code) {
+    case "409:RECEIPT_ALREADY_REDEEMED":
       return {
         title: "Receipt already used",
         messages: [
@@ -70,14 +72,11 @@ export function redemptionIssue(error: unknown) {
         action: "Edit receipt",
         target: 2
       } as const;
-    case "PROMOTION_INELIGIBLE":
-    case "PROMOTION_UNAVAILABLE": {
-      const reasons =
-        error instanceof CheckoutRequestError
-          ? error.reasonCodes.flatMap((reason) =>
-              Object.hasOwn(promotionReasons, reason) ? [promotionReasons[reason]] : []
-            )
-          : [];
+    case "409:PROMOTION_INELIGIBLE":
+    case "409:PROMOTION_UNAVAILABLE": {
+      const reasons = error.reasonCodes.flatMap((reason) =>
+        Object.hasOwn(promotionReasons, reason) ? [promotionReasons[reason]] : []
+      );
       return {
         title: "Promotion unavailable",
         messages: reasons.length ? reasons : ["The selected promotion is no longer available."],
@@ -85,8 +84,8 @@ export function redemptionIssue(error: unknown) {
         target: 3
       } as const;
     }
-    case "CONTEXT_UNAVAILABLE":
-    case "CHECKOUT_CONTEXT_CHANGED":
+    case "404:CONTEXT_UNAVAILABLE":
+    case "409:CHECKOUT_CONTEXT_CHANGED":
       return {
         title: "Checkout details changed",
         messages: [
@@ -95,7 +94,7 @@ export function redemptionIssue(error: unknown) {
         action: "Refresh offers",
         target: 3
       } as const;
-    case "REDEMPTION_CONFLICT":
+    case "409:REDEMPTION_CONFLICT":
       return {
         title: "Redemption conflict",
         messages: [
@@ -104,16 +103,16 @@ export function redemptionIssue(error: unknown) {
         action: "Refresh offers",
         target: 3
       } as const;
-    case "INVALID_REQUEST":
+    case "400:INVALID_REQUEST":
       return {
         title: "Check the bill details",
         messages: ["Verify the subtotal and receipt number before continuing."],
         action: "Edit bill",
         target: 2
       } as const;
-    case "AUTHENTICATION_REQUIRED":
-    case "AUTHORIZATION_DENIED":
-    case "CSRF_VALIDATION_FAILED":
+    case "401:AUTHENTICATION_REQUIRED":
+    case "403:AUTHORIZATION_DENIED":
+    case "403:CSRF_VALIDATION_FAILED":
       return {
         title: "Checkout access unavailable",
         messages: ["Check your employee session and branch access before continuing."],
@@ -121,13 +120,6 @@ export function redemptionIssue(error: unknown) {
         target: 1
       } as const;
     default:
-      return {
-        title: "Redemption could not be confirmed",
-        messages: [
-          "Check the receipt and refresh the offers before trying again. If the outcome is still unclear, ask a manager to verify the receipt."
-        ],
-        action: "Refresh offers",
-        target: 3
-      } as const;
+      return null;
   }
 }

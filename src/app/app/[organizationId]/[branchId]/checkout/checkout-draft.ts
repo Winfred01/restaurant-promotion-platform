@@ -1,6 +1,8 @@
 import { z } from "zod";
 
-const prefix = "staff-checkout:v1:";
+import { checkoutDraftNamespace } from "@/app/checkout-draft-storage";
+
+const prefix = checkoutDraftNamespace + "v1:";
 export const checkoutDraftLifetimeMs = 30 * 60 * 1000;
 
 const draftSchema = z.object({
@@ -10,6 +12,7 @@ const draftSchema = z.object({
   subtotal: z.string().max(16),
   receipt: z.string().max(80),
   selected: z.string().max(191),
+  redemptionPending: z.literal(true).optional(),
   expiresAt: z.number().int()
 });
 
@@ -37,7 +40,10 @@ export function readCheckoutDraft(storage: Storage, key: string, now = Date.now(
   // Scan backwards because removing an entry moves subsequent keys.
   for (let i = storage.length - 1; i >= 0; i--) {
     const storedKey = storage.key(i);
-    if (storedKey?.startsWith(prefix) && !parseDraft(storage.getItem(storedKey), now)) {
+    if (
+      storedKey?.startsWith(checkoutDraftNamespace) &&
+      (!storedKey.startsWith(prefix) || !parseDraft(storage.getItem(storedKey), now))
+    ) {
       storage.removeItem(storedKey);
     }
   }

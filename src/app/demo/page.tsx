@@ -1,5 +1,6 @@
 import Link from "next/link";
 
+import { SessionTransitionForm } from "@/app/session-transition-form";
 import { isGuidedDemoEnabled } from "@/server/demo/entry";
 import { enterGuidedDemo } from "./actions";
 import styles from "./demo.module.css";
@@ -74,7 +75,11 @@ export default async function DemoPage({
           <h2 id="role-title">Enter as</h2>
           <div className={styles.roleList}>
             {roles.map((role) => (
-              <form action={enterGuidedDemo} className={styles.role} key={role.value}>
+              <SessionTransitionForm
+                action={enterGuidedDemo}
+                className={styles.role}
+                key={role.value}
+              >
                 <input name="role" type="hidden" value={role.value} />
                 <div>
                   <h3>{role.label}</h3>
@@ -84,7 +89,7 @@ export default async function DemoPage({
                 <button type="submit" aria-label={`Enter as ${role.label}`}>
                   Enter as {role.label} <span aria-hidden="true">↗</span>
                 </button>
-              </form>
+              </SessionTransitionForm>
             ))}
           </div>
         </section>

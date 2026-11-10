@@ -1,7 +1,9 @@
 "use client";
 
-import { useState, type FormEvent } from "react";
+import { useEffect, useState, type FormEvent } from "react";
 import { signIn } from "next-auth/react";
+
+import { clearTabCheckoutDrafts } from "@/app/checkout-draft-storage";
 
 const demoRoles = [
   ["Owner", "owner@restaurant-demo.example.com"],
@@ -14,6 +16,7 @@ export function LoginForm({ showDemoAccounts }: { showDemoAccounts: boolean }) {
   const [password, setPassword] = useState("");
   const [error, setError] = useState("");
   const [pending, setPending] = useState(false);
+  useEffect(clearTabCheckoutDrafts, []);
 
   async function handleSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();

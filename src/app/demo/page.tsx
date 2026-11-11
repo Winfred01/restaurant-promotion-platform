@@ -105,9 +105,8 @@ export default async function DemoPage({
       <section className={styles.note} aria-labelledby="visit-title">
         <h2 id="visit-title">Your own visit</h2>
         <p>
-          Every role opens the real employee application with server-checked permissions. Demo data
-          is fictional; customers never need an account. The operator controls session supply and
-          reset.
+          Each visit lasts up to two hours. For Staff checkout, try (416) 555-0103 and use a
+          fictional receipt number. Use fictional details throughout the demo.
         </p>
       </section>
     </main>

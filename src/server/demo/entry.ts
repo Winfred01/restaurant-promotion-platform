@@ -2,15 +2,29 @@ import { createHash, randomBytes } from "node:crypto";
 
 import { MembershipRole, type PrismaClient } from "@prisma/client";
 
+import { earliestFreshDemoFixture } from "./fixture-age";
+
 export function isGuidedDemoEnabled(env: Record<string, string | undefined> = process.env) {
   if (env.DEMO_PUBLIC_ENTRY !== "1" || !env.AUTH_SECRET || env.AUTH_SECRET.length < 32) {
     return false;
   }
   try {
     const url = new URL(env.DATABASE_URL ?? "");
+    const databaseName = decodeURIComponent(url.pathname.slice(1));
+    if (env.VERCEL_ENV === "production" || env.VERCEL_ENV === "preview") {
+      const stage = env.VERCEL_ENV === "production" ? "public" : "preview";
+      if (
+        env.DEMO_FIXTURES_ONLY !== "1" ||
+        databaseName !== `restaurant_promotion_${stage}_demo` ||
+        !url.hostname.split(".")[0].endsWith("-pooler") ||
+        !["require", "verify-full"].includes(url.searchParams.get("sslmode") ?? "")
+      ) {
+        return false;
+      }
+    }
     return (
       ["postgres:", "postgresql:"].includes(url.protocol) &&
-      decodeURIComponent(url.pathname.slice(1)).toLowerCase().includes("demo")
+      databaseName.toLowerCase().includes("demo")
     );
   } catch {
     return false;
@@ -34,7 +48,7 @@ export async function claimDemoTenant(db: PrismaClient, role: MembershipRole) {
   for (let attempt = 0; attempt < 3; attempt += 1) {
     const result = await db.$transaction(async (tx) => {
       const lease = await tx.demoTenantLease.findFirst({
-        where: { status: "AVAILABLE" },
+        where: { status: "AVAILABLE", createdAt: { gte: earliestFreshDemoFixture() } },
         orderBy: { createdAt: "asc" },
         select: { id: true, organizationId: true }
       });

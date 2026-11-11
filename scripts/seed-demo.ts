@@ -3,6 +3,7 @@ import { pathToFileURL } from "node:url";
 import { hash } from "@node-rs/argon2";
 import {
   MembershipRole,
+  type Prisma,
   PrismaClient,
   PromotionClaimStatus,
   PromotionRewardType,
@@ -72,7 +73,11 @@ export function validateDemoSeedEnvironment(env: DemoSeedEnvironment) {
   return env.DEMO_SEED_PASSWORD;
 }
 
-export async function seedDemoDatabase(db: PrismaClient, password: string, tenantTag?: string) {
+export async function seedDemoDatabase(
+  db: PrismaClient | Prisma.TransactionClient,
+  password: string,
+  tenantTag?: string
+) {
   if (tenantTag !== undefined && !/^[a-f0-9]{16}$/.test(tenantTag)) {
     throw new DemoSeedError("Invalid isolated demo tenant tag.");
   }
@@ -92,7 +97,7 @@ export async function seedDemoDatabase(db: PrismaClient, password: string, tenan
     parallelism: 1
   });
 
-  return db.$transaction(async (tx) => {
+  async function writeFixtures(tx: Prisma.TransactionClient) {
     const [existingOrganization, existingUsers] = await Promise.all([
       tx.restaurantOrganization.findUnique({ where: { slug: organizationSlug } }),
       tx.user.findMany({
@@ -391,7 +396,9 @@ export async function seedDemoDatabase(db: PrismaClient, password: string, tenan
       }
     });
     return organization.id;
-  });
+  }
+
+  return "$transaction" in db ? db.$transaction(writeFixtures) : writeFixtures(db);
 }
 
 async function main() {

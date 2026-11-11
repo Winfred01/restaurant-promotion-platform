@@ -10,7 +10,12 @@ import {
 } from "@prisma/client";
 import { z } from "zod";
 
-import { InvalidPhoneNumberError, normalizePhoneNumber } from "@/server/customers/phone";
+import {
+  InvalidPhoneNumberError,
+  normalizePhoneNumber,
+  requireFictionalDemoPhone
+} from "@/server/customers/phone";
+import { isDemoFixturesOnly } from "@/server/demo/environment";
 import {
   createRetryingTransactionClient,
   isPrismaKnownRequestErrorCode
@@ -65,7 +70,9 @@ export function createPublicClaimService(
   return {
     async claim(input: PublicClaimInput): Promise<void> {
       const parsed = inputSchema.parse(input);
-      const normalizedPhone = normalizePhoneNumber(parsed.phoneNumber);
+      const normalizedPhone = isDemoFixturesOnly()
+        ? requireFictionalDemoPhone(parsed.phoneNumber)
+        : normalizePhoneNumber(parsed.phoneNumber);
       const secret = options.hashSecret ?? process.env.AUTH_SECRET;
       if (!secret || secret.length < 32) {
         throw new PublicClaimConfigurationError();

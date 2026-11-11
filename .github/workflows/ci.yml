@@ -62,7 +62,8 @@ jobs:
         run: npm run typecheck
 
       - name: Unit tests
-        run: npm test
+        # Files share one PostgreSQL instance. Concurrency cases still run within their test.
+        run: npm test -- --maxWorkers=1
 
       - name: Build
         run: npm run build
@@ -83,9 +84,14 @@ jobs:
           export DEMO_SEED_CONFIRM=restaurant-demo
           npm run seed:demo
           export DEMO_POOL_CONFIRM=restaurant-demo-pool
-          export DEMO_POOL_COUNT=2
+          export DEMO_POOL_TARGET=localhost:5432/restaurant_promotion_demo
+          export DEMO_POOL_COUNT=5
           npm run provision:demo-pool
           npm run e2e
+          export DEMO_FIXTURES_ONLY=1
+          export DEMO_POOL_COUNT=3
+          npm run provision:demo-pool
+          npm run smoke:demo
 
       - name: Upload browser artifacts on failure
         if: failure()

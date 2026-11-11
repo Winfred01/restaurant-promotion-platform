@@ -11,7 +11,8 @@ describe("public landing page", () => {
     expect(html).toContain("The Staff checkout");
     expect(html).toContain("Confirm the receipt");
     expect(html).toContain("promotion-linked sales");
-    expect(html).toContain("public URL will be");
+    expect(html).toContain("Try Live Demo");
+    expect(html).toContain("fictional customer and transaction data");
     expect(html).toContain('href="/login"');
     expect(html).toContain('href="/demo"');
     expect(html).toContain("https://github.com/Winfred01/restaurant-promotion-platform");

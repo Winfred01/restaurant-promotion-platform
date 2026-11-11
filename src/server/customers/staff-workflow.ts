@@ -8,8 +8,10 @@ import {
 } from "@/server/auth/session";
 import { createPrismaAuthorizationGuard } from "@/server/authorization/guard";
 import { Permission } from "@/server/authorization/permissions";
+import { isDemoFixturesOnly } from "@/server/demo/environment";
 import { findOrCreateCustomer } from "./creation";
 import { findCustomerByPhoneNumber } from "./lookup";
+import { requireFictionalDemoPhone } from "./phone";
 
 const tenantIdSchema = z.string().trim().min(1).max(191);
 const phoneNumberSchema = z.string().trim().min(1).max(64);
@@ -84,7 +86,9 @@ export function createStaffCustomerWorkflow({
       });
       const customer = await findCustomerByPhoneNumber(db, {
         organizationId: context.organizationId,
-        phoneNumber: parsedInput.phoneNumber
+        phoneNumber: isDemoFixturesOnly()
+          ? requireFictionalDemoPhone(parsedInput.phoneNumber)
+          : parsedInput.phoneNumber
       });
 
       return {
@@ -111,10 +115,13 @@ export function createStaffCustomerWorkflow({
         });
       }
 
+      const fixturesOnly = isDemoFixturesOnly();
       const result = await findOrCreateCustomer(db, {
         organizationId: context.organizationId,
-        phoneNumber: parsedInput.phoneNumber,
-        phoneNumberDisplay: parsedInput.phoneNumberDisplay,
+        phoneNumber: fixturesOnly
+          ? requireFictionalDemoPhone(parsedInput.phoneNumber)
+          : parsedInput.phoneNumber,
+        phoneNumberDisplay: fixturesOnly ? undefined : parsedInput.phoneNumberDisplay,
         acquisitionChannelId: parsedInput.acquisitionChannelId
       });
 

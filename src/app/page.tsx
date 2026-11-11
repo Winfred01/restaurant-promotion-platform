@@ -46,7 +46,7 @@ export default function Home() {
             capture, and honest promotion reporting.
           </p>
           <Link href="/demo" className={styles.heroAction}>
-            Open the demo
+            Try Live Demo
           </Link>
         </div>
       </section>
@@ -116,9 +116,8 @@ export default function Home() {
       <section className={styles.demo} aria-labelledby="demo-title">
         <h2 id="demo-title">Try the real workflow</h2>
         <p>
-          The demo currently runs locally with an isolated seeded database. A public URL will be
-          added after deployment and smoke verification. Guided role entry opens isolated sessions
-          when the dedicated demo environment is configured.
+          Choose Owner, Manager, or Staff to open an isolated workspace. This is a demonstration
+          environment using fictional customer and transaction data.
         </p>
         <Link href="/demo" className={styles.demoLink}>
           Choose a role

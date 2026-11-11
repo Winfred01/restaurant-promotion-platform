@@ -1,5 +1,6 @@
 import type { EmployeeSessionUser } from "@/server/auth/credentials";
 import { isGuidedDemoEnabled } from "@/server/demo/entry";
+import { isDemoFixturesOnly } from "@/server/demo/environment";
 
 export type EmployeeSession = {
   user: EmployeeSessionUser;
@@ -21,6 +22,7 @@ export async function getCurrentEmployeeSession(): Promise<EmployeeSession | nul
   if (!session?.user?.id || !session.user.email || !session.user.name) {
     return null;
   }
+  if (isDemoFixturesOnly() && !session.user.demoLeaseId) return null;
 
   if (
     session.user.demoLeaseId &&

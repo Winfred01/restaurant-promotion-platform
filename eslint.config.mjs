@@ -4,7 +4,14 @@ import tseslint from "typescript-eslint";
 
 export default [
   {
-    ignores: [".next/**", "coverage/**", "node_modules/**", "out/**"]
+    ignores: [
+      ".next/**",
+      "coverage/**",
+      "node_modules/**",
+      "out/**",
+      "output/playwright/**",
+      "playwright-report/**"
+    ]
   },
   js.configs.recommended,
   ...tseslint.configs.recommended,

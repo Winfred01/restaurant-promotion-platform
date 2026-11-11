@@ -5,10 +5,18 @@ const MAX_E164_DIGITS = 15;
 export class InvalidPhoneNumberError extends Error {
   readonly code = "INVALID_PHONE_NUMBER";
 
-  constructor() {
-    super("Phone number is invalid");
+  constructor(message = "Phone number is invalid") {
+    super(message);
     this.name = "InvalidPhoneNumberError";
   }
+}
+
+export function requireFictionalDemoPhone(input: string) {
+  const normalized = normalizePhoneNumber(input);
+  if (!/^\+141655501\d{2}$/.test(normalized)) {
+    throw new InvalidPhoneNumberError("Use a fictional demo number from (416) 555-0100 to 0199.");
+  }
+  return normalized;
 }
 
 function invalidPhoneNumber(): never {

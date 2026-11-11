@@ -2,6 +2,7 @@ import { ZodError } from "zod";
 
 import { AuthenticationRequiredError } from "@/server/auth/session";
 import { AuthorizationDeniedError } from "@/server/authorization/guard";
+import { isDemoFixturesOnly } from "@/server/demo/environment";
 import { AcquisitionChannelRequiredError, AcquisitionChannelUnavailableError } from "./creation";
 import { InvalidPhoneNumberError } from "./phone";
 import type { StaffCustomerWorkflow } from "./staff-workflow";
@@ -58,6 +59,12 @@ function hasValidMutationOrigin(request: Request) {
 export function createStaffCustomerRouteHandlers(workflow: StaffCustomerWorkflow) {
   return {
     async GET(request: Request) {
+      if (isDemoFixturesOnly()) {
+        return new Response(null, {
+          status: 405,
+          headers: { Allow: "POST", "Cache-Control": "no-store" }
+        });
+      }
       try {
         const url = new URL(request.url);
         const result = await workflow.lookup(Object.fromEntries(url.searchParams));
@@ -92,7 +99,10 @@ export function createStaffCustomerRouteHandlers(workflow: StaffCustomerWorkflow
           }
         }
         const result = await workflow.create(input);
-        return Response.json(result, { status: result.isNewCustomer ? 201 : 200 });
+        return Response.json(result, {
+          status: result.isNewCustomer ? 201 : 200,
+          headers: { "cache-control": "no-store" }
+        });
       } catch (error) {
         return responseForError(error);
       }

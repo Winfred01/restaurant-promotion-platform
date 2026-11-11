@@ -4,6 +4,7 @@ import Credentials from "next-auth/providers/credentials";
 import { prisma } from "@/server/db";
 import { validateEmployeeCredentials } from "@/server/auth/credentials";
 import { consumeDemoTicket, isGuidedDemoEnabled } from "@/server/demo/entry";
+import { isDemoFixturesOnly } from "@/server/demo/environment";
 
 export const { handlers, auth, signIn, signOut } = NextAuth({
   providers: [
@@ -12,7 +13,8 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
         email: { label: "Email", type: "email" },
         password: { label: "Password", type: "password" }
       },
-      authorize: async (credentials) => validateEmployeeCredentials(prisma, credentials)
+      authorize: async (credentials) =>
+        isDemoFixturesOnly() ? null : validateEmployeeCredentials(prisma, credentials)
     }),
     Credentials({
       id: "guided-demo",
@@ -24,6 +26,7 @@ export const { handlers, auth, signIn, signOut } = NextAuth({
       }
     })
   ],
+  pages: isDemoFixturesOnly() ? { signIn: "/login" } : undefined,
   session: {
     strategy: "jwt"
   },

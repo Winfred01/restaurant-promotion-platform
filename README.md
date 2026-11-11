@@ -4,6 +4,14 @@ English | [简体中文](README.zh-CN.md)
 
 A multi-tenant SaaS platform for restaurants to create promotions, manage coupon redemption, capture new-customer acquisition sources, and measure how promotions contribute to revenue.
 
+## Live demo
+
+**Public deployment pending.** In a configured demo environment, choose **Try Live Demo** on the landing page or open `/demo`. Owner shows organization analytics and both branches, Manager shows promotions and redemption history, and Staff runs the four-step checkout with Best Deal. Try fictional customer `(416) 555-0103`.
+
+This is a demonstration environment using fictional customer and transaction data.
+
+The Next.js and TypeScript application uses Tailwind CSS, Auth.js and server-side RBAC. Prisma 6.12.0 and PostgreSQL enforce tenant-scoped data, receipt uniqueness and transactional redemption. [GitHub repository](https://github.com/Winfred01/restaurant-promotion-platform) · [Architecture](docs/ARCHITECTURE.md) · [Deployment guide](docs/PUBLIC-DEMO-DEPLOYMENT.md) · [Checkout screenshots](docs/issue-75-checkout)
+
 ## Employee demo login
 
 The app has an employee login at `/login`. To create a separate, disposable demo tenant with
@@ -80,16 +88,18 @@ independent, fictional restaurant tenants from an operator shell:
 ```powershell
 $env:DEMO_PUBLIC_ENTRY = "1"
 $env:DEMO_POOL_CONFIRM = "restaurant-demo-pool"
+$env:DEMO_POOL_TARGET = "localhost:5432/restaurant_promotion_demo"
 $env:DEMO_POOL_COUNT = "12"
 npm.cmd run prisma:migrate:deploy
 npm.cmd run provision:demo-pool
-Remove-Item Env:DEMO_POOL_CONFIRM, Env:DEMO_POOL_COUNT
+Remove-Item Env:DEMO_POOL_CONFIRM, Env:DEMO_POOL_TARGET, Env:DEMO_POOL_COUNT
 ```
 
 Set `DATABASE_URL` and `AUTH_SECRET` in the runtime environment before these commands; never put a
 real credential in the repository. The provisioning command also works for a dedicated demo deployment
-built with `NODE_ENV=production` because it is an operator-only CLI, not an HTTP endpoint. It refuses
-non-demo database names, missing confirmation, and pool counts outside 1–50. Every pool tenant has
+built with `NODE_ENV=production` because it is an operator-only CLI. It checks the exact host and
+database, requires confirmation, and fills the fresh available pool to the requested target of 1–50.
+Every pool tenant has
 separate customers, promotions, memberships, audit records, and random unavailable employee passwords.
 The role selector atomically claims one unused tenant per visit, issues a single-use 60-second sign-in
 ticket, and creates an Auth.js session for that tenant's selected employee role. The session expires
@@ -105,19 +115,10 @@ fictional customer and capture an acquisition channel once. The persistent works
 the demo session and gives role-appropriate next steps. Each visit uses its own data, so another
 visitor's edits cannot change this walkthrough.
 
-Monitor the count of `DemoTenantLease` rows with `status = AVAILABLE` through an authenticated
-database console. When low, run the same confirmed provisioning command to add tenants. Never recycle
-a claimed tenant for a different visitor. For a full reset, record the demo database identifier, time,
-reason, and operator in an external change log, disable `DEMO_PUBLIC_ENTRY`, stop the app, destroy and
-recreate **only** that dedicated demo database in the provider console, rerun migrations and pool
-provisioning, verify an Owner/Manager/Staff visit in separate browser profiles, then re-enable entry.
-Database destruction also removes its in-database audit trail, so retain the external change log and
-provider audit records. No public seed or reset endpoint exists.
-
-### Public Demo URL
-
-Not deployed yet. The operator should add the verified public URL here after Issue #25 deployment
-and smoke verification. Until then, use the local `/login` route with the isolated demo database.
+Monitor available leases younger than 21 days through an authenticated database console. Run the same
+confirmed provisioning command to refill when stock is low. The
+[deployment guide](docs/PUBLIC-DEMO-DEPLOYMENT.md#maintenance-and-recovery) covers environment
+isolation, recovery and preserving audit records.
 
 Managers and Owners can open **Promotions** from the branch workspace to create and edit bill-level
 fixed, percentage, or spend-threshold offers, select branches, and activate, pause, or archive them.

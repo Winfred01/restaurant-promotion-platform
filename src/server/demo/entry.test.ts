@@ -101,9 +101,17 @@ describe("guided demo entry", () => {
       DEMO_PUBLIC_ENTRY: "1",
       DEMO_POOL_CONFIRM: "restaurant-demo-pool",
       DEMO_POOL_COUNT: "2",
+      DEMO_POOL_TARGET: "localhost:5432/restaurant_demo",
       DATABASE_URL: "postgresql://localhost:5432/restaurant_demo"
     };
-    expect(validateDemoPoolEnvironment(env)).toBe(2);
+    expect(validateDemoPoolEnvironment(env)).toEqual({
+      databaseName: "restaurant_demo",
+      target: 2,
+      hosted: false
+    });
+    expect(() =>
+      validateDemoPoolEnvironment({ ...env, DEMO_POOL_TARGET: "other/restaurant_demo" })
+    ).toThrow();
     expect(() => validateDemoPoolEnvironment({ ...env, DEMO_POOL_CONFIRM: undefined })).toThrow();
     expect(() =>
       validateDemoPoolEnvironment({
@@ -112,6 +120,41 @@ describe("guided demo entry", () => {
       })
     ).toThrow();
     expect(() => validateDemoPoolEnvironment({ ...env, DEMO_POOL_COUNT: "51" })).toThrow();
+  });
+
+  it("isolates Vercel stages and confirms a direct hosted operator target", () => {
+    const database = "restaurant_promotion_preview_demo";
+    const host = "ep-fixture.us-east-2.aws.neon.tech";
+    const pooled = host.replace("ep-fixture", "ep-fixture-pooler");
+    const env = {
+      DEMO_FIXTURES_ONLY: "1",
+      DEMO_PUBLIC_ENTRY: "1",
+      AUTH_SECRET: "s".repeat(32),
+      VERCEL_ENV: "preview",
+      DATABASE_URL: `postgresql://${pooled}/${database}?sslmode=require`
+    };
+    expect(isGuidedDemoEnabled(env)).toBe(true);
+    expect(isGuidedDemoEnabled({ ...env, VERCEL_ENV: "production" })).toBe(false);
+    expect(isGuidedDemoEnabled({ ...env, DEMO_FIXTURES_ONLY: undefined })).toBe(false);
+    const operator = {
+      ...env,
+      DEMO_POOL_CONFIRM: "restaurant-demo-pool",
+      DEMO_POOL_COUNT: "12",
+      DEMO_POOL_TARGET: `${host}/${database}`,
+      DATABASE_URL: `postgresql://${host}/${database}?sslmode=require`
+    };
+    expect(validateDemoPoolEnvironment(operator)).toEqual({
+      databaseName: database,
+      target: 12,
+      hosted: true
+    });
+    expect(() =>
+      validateDemoPoolEnvironment({
+        ...operator,
+        DEMO_POOL_TARGET: `${pooled}/${database}`,
+        DATABASE_URL: env.DATABASE_URL
+      })
+    ).toThrow(/direct TLS/);
   });
 
   it("claims distinct tenant sessions and consumes each sign-in ticket once", async () => {

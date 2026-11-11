@@ -6,7 +6,7 @@
 
 ## 在线演示
 
-**待部署。** 在已配置的演示环境中，从首页选择 **Try Live Demo** 或打开 `/demo`。Owner 可查看两个分店和组织分析，Manager 可管理促销并查看核销历史，Staff 可使用虚构号码 `(416) 555-0103` 体验含 Best Deal 的四步结账。
+打开[在线演示](https://restaurant-promotion-platform.vercel.app/demo)，选择角色即可体验，无需注册或登录。Owner 可查看两个分店和组织分析，Manager 可管理促销并查看核销历史，Staff 可使用虚构号码 `(416) 555-0103` 体验含 Best Deal 的四步结账。
 
 演示环境使用虚构的顾客和交易数据。Next.js、TypeScript 和 Tailwind CSS 提供工作台，Auth.js 和服务端 RBAC 检查角色权限，Prisma 6.12.0 和 PostgreSQL 保证租户范围内的查询、收据唯一性和事务核销。 [GitHub 仓库](https://github.com/Winfred01/restaurant-promotion-platform) · [架构](docs/ARCHITECTURE.md) · [部署手册](docs/PUBLIC-DEMO-DEPLOYMENT.md) · [结账截图](docs/issue-75-checkout)
 

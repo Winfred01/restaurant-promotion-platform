@@ -6,7 +6,7 @@ A multi-tenant SaaS platform for restaurants to create promotions, manage coupon
 
 ## Live demo
 
-**Public deployment pending.** In a configured demo environment, choose **Try Live Demo** on the landing page or open `/demo`. Owner shows organization analytics and both branches, Manager shows promotions and redemption history, and Staff runs the four-step checkout with Best Deal. Try fictional customer `(416) 555-0103`.
+Open the [live demo](https://restaurant-promotion-platform.vercel.app/demo) and choose a role. No account is required. Owner shows organization analytics and both branches, Manager shows promotions and redemption history, and Staff runs the four-step checkout with Best Deal. Try fictional customer `(416) 555-0103`.
 
 This is a demonstration environment using fictional customer and transaction data.
 
